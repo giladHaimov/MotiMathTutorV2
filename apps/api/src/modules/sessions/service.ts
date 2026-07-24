@@ -14,10 +14,10 @@ import { ApiError } from '../../http/errors.js';
 import type { Profile } from '../profile/service.js';
 import { buildPublicSession } from './serializer.js';
 import { initialWorkspace, loadChunkRows, pickNextProblem } from './repo.js';
+import { runPostAcceptWriteHook } from './test-hooks.js';
 
 export type SubmitOutcome =
   | { kind: 'APPLIED'; session: PublicSession }
-  | { kind: 'DUPLICATE'; session: PublicSession }
   | { kind: 'REJECTED'; session: PublicSession }
   | { kind: 'CONFLICT'; current: PublicSession };
 
@@ -156,9 +156,15 @@ export async function submitAction(
       throw new ApiError('NOT_FOUND', 'Session not found.');
     }
 
-    // (2/3) Idempotency — a completed duplicate returns its stored result (AC-017).
+    // (2/3) Idempotency — a completed duplicate replays its stored result AND its
+    // original outcome, so the retry's HTTP status matches the first response
+    // (AC-017): a conflict replays 409, an applied/rejected replays 200.
     const existing = await tx
-      .select({ completedAt: stageAttempts.completedAt, publicResult: stageAttempts.publicResult })
+      .select({
+        completedAt: stageAttempts.completedAt,
+        outcome: stageAttempts.outcome,
+        publicResult: stageAttempts.publicResult,
+      })
       .from(stageAttempts)
       .where(
         and(
@@ -167,7 +173,15 @@ export async function submitAction(
         ),
       );
     if (existing[0]?.completedAt && existing[0].publicResult) {
-      return { kind: 'DUPLICATE', session: existing[0].publicResult as PublicSession };
+      const stored = existing[0].publicResult as PublicSession;
+      switch (existing[0].outcome) {
+        case 'CONFLICT':
+          return { kind: 'CONFLICT', current: stored };
+        case 'REJECTED':
+          return { kind: 'REJECTED', session: stored };
+        default:
+          return { kind: 'APPLIED', session: stored };
+      }
     }
 
     if (s.status !== 'ACTIVE') {
@@ -290,6 +304,10 @@ export async function submitAction(
         contentVersion: s.contentVersion,
         events: result.events,
       });
+
+      // Test-only fault injection point: throwing here must roll back the whole
+      // unit (state update + attempt + events). No-op in production.
+      await runPostAcceptWriteHook();
 
       return { kind: 'APPLIED', session: publicSession };
     }

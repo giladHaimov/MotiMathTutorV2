@@ -113,20 +113,32 @@ describe('session flow (real API + PostgreSQL)', () => {
 
   it('stale expected_state_version is rejected with authoritative state (AC-018, SCN-09)', async () => {
     const session = await startSession();
+    const clientActionId = newUuid();
+    const stalePayload = {
+      client_action_id: clientActionId,
+      expected_state_version: 999, // stale
+      action_type: 'ASSIGN_SLOT' as const,
+      payload: { slot: 'WHOLE' as const, token_id: session.visible_chunks[0]!.tokens[0]!.token_id },
+    };
     const res = await authed({
       method: 'POST',
       url: `/api/sessions/${session.session_id}/actions`,
-      payload: {
-        client_action_id: newUuid(),
-        expected_state_version: 999, // stale
-        action_type: 'ASSIGN_SLOT',
-        payload: { slot: 'WHOLE', token_id: session.visible_chunks[0]!.tokens[0]!.token_id },
-      },
+      payload: stalePayload,
     });
     expect(res.statusCode).toBe(409);
     const body = res.json() as { error: { code: string }; current_state: PublicSession };
     expect(body.error.code).toBe('STATE_VERSION_CONFLICT');
     expect(body.current_state.state_version).toBe(session.state_version);
+
+    // Idempotent retry preserves the ORIGINAL status: a duplicate of a conflict
+    // replays 409, not 200.
+    const retry = await authed({
+      method: 'POST',
+      url: `/api/sessions/${session.session_id}/actions`,
+      payload: stalePayload,
+    });
+    expect(retry.statusCode).toBe(409);
+    expect((retry.json() as { error: { code: string } }).error.code).toBe('STATE_VERSION_CONFLICT');
   });
 
   it('malformed action payload is rejected without state change (AC-016)', async () => {
