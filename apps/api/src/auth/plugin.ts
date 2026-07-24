@@ -1,13 +1,15 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.js';
-import { toWebHeaders } from './headers.js';
+import { toAuthHeaders } from './headers.js';
 import { getOrCreateProfile, type Profile } from '../modules/profile/service.js';
 import { db } from '../db/index.js';
 import { sendError } from '../http/errors.js';
+import type { AppConfig } from '../config/index.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
     auth: Auth;
+    appConfig: AppConfig;
   }
   interface FastifyRequest {
     authUser?: { id: string };
@@ -28,7 +30,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     async handler(request: FastifyRequest, reply: FastifyReply) {
       const auth = request.server.auth;
       const url = new URL(request.url, `${request.protocol}://${request.hostname}`);
-      const headers = toWebHeaders(request);
+      const headers = toAuthHeaders(request, request.server.appConfig.TRUSTED_PROXIES);
       const method = request.method.toUpperCase();
       const hasBody = method !== 'GET' && method !== 'HEAD';
       const webRequest = new Request(url, {
@@ -59,7 +61,9 @@ export function registerAuthRoutes(app: FastifyInstance): void {
  * pseudonymous profile used for ownership checks.
  */
 export async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const session = await request.server.auth.api.getSession({ headers: toWebHeaders(request) });
+  const session = await request.server.auth.api.getSession({
+    headers: toAuthHeaders(request, request.server.appConfig.TRUSTED_PROXIES),
+  });
   if (!session?.user) {
     sendError(request, reply, 'UNAUTHORIZED', 'Authentication is required.');
     return reply;

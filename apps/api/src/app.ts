@@ -37,6 +37,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   app.decorate('auth', createAuth(config));
+  app.decorate('appConfig', config);
 
   // CORS with credentials so the Better Auth cookie session works cross-origin in dev.
   await app.register(cors, {

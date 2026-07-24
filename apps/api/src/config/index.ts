@@ -1,3 +1,4 @@
+import { BlockList, isIP } from 'node:net';
 import { z } from 'zod';
 
 /**
@@ -6,33 +7,63 @@ import { z } from 'zod';
  * configuration aborts startup (AC-007); secrets are never logged (AC-042).
  */
 
-/** True for a single IPv4 address or IPv4 CIDR (e.g. 10.0.0.1, 10.0.0.0/8). */
-function isIpv4OrCidr(value: string): boolean {
-  const match = /^(?<ip>(?:\d{1,3}\.){3}\d{1,3})(?:\/(?<prefix>\d{1,2}))?$/.exec(value);
-  if (!match?.groups?.ip) return false;
-  const octets = match.groups.ip.split('.').map(Number);
-  if (octets.some((o) => o > 255)) return false;
-  if (match.groups.prefix !== undefined) {
-    const prefix = Number(match.groups.prefix);
-    if (prefix > 32) return false;
-  }
-  return true;
-}
-
-/** True for a basic IPv6 address or IPv6 CIDR. */
-function isIpv6OrCidr(value: string): boolean {
-  if (!value.includes(':')) return false;
-  const [addr, prefix] = value.split('/');
-  if (!addr || addr.length < 2) return false;
-  if (prefix !== undefined) {
-    const p = Number(prefix);
-    if (!Number.isInteger(p) || p < 0 || p > 128) return false;
-  }
-  return true;
-}
-
+/**
+ * Validate a TRUSTED_PROXIES entry as a real IPv4/IPv6 address or CIDR.
+ * Uses Node's `net.isIP` plus explicit prefix-length bounds (IPv4 ≤32, IPv6 ≤128).
+ */
 export function isTrustedProxyEntry(value: string): boolean {
-  return isIpv4OrCidr(value) || isIpv6OrCidr(value);
+  if (isIP(value) !== 0) return true;
+
+  const slash = value.lastIndexOf('/');
+  if (slash <= 0 || slash === value.length - 1) return false;
+
+  const addr = value.slice(0, slash);
+  const prefixRaw = value.slice(slash + 1);
+  if (!/^\d{1,3}$/.test(prefixRaw)) return false;
+
+  const prefix = Number(prefixRaw);
+  if (!Number.isInteger(prefix) || prefix < 0) return false;
+
+  const version = isIP(addr);
+  if (version === 4) return prefix <= 32;
+  if (version === 6) return prefix <= 128;
+  return false;
+}
+
+/** Strip IPv4-mapped IPv6 so `::ffff:127.0.0.1` compares as `127.0.0.1`. */
+export function normalizeIp(address: string | undefined | null): string | null {
+  if (!address) return null;
+  let value = address.trim();
+  if (value.startsWith('::ffff:')) {
+    value = value.slice('::ffff:'.length);
+  }
+  return isIP(value) !== 0 ? value : null;
+}
+
+/** True when `address` is exactly listed or covered by a CIDR in `trustedProxies`. */
+export function isAddressInTrustedProxies(address: string, trustedProxies: string[]): boolean {
+  const peer = normalizeIp(address);
+  if (!peer || trustedProxies.length === 0) return false;
+
+  const version = isIP(peer);
+  if (version === 0) return false;
+
+  const list = new BlockList();
+  for (const entry of trustedProxies) {
+    if (isIP(entry) !== 0) {
+      list.addAddress(entry);
+      continue;
+    }
+    const slash = entry.lastIndexOf('/');
+    if (slash <= 0) continue;
+    const addr = entry.slice(0, slash);
+    const prefix = Number(entry.slice(slash + 1));
+    const entryVersion = isIP(addr);
+    if (entryVersion === 4) list.addSubnet(addr, prefix, 'ipv4');
+    else if (entryVersion === 6) list.addSubnet(addr, prefix, 'ipv6');
+  }
+
+  return list.check(peer, version === 4 ? 'ipv4' : 'ipv6');
 }
 
 const configSchema = z.object({
