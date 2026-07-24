@@ -42,6 +42,25 @@ describe('config', () => {
     expect(() => loadConfig(rest)).toThrow(/BETTER_AUTH_SECRET/);
   });
 
+  it('aborts production when BETTER_AUTH_SECRET is a documented placeholder', () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        NODE_ENV: 'production',
+        BETTER_AUTH_SECRET: 'compose-only-example-secret-change-me',
+      }),
+    ).toThrow(/placeholder|BETTER_AUTH_SECRET/);
+  });
+
+  it('allows a non-placeholder secret in production', () => {
+    const config = loadConfig({
+      ...base,
+      NODE_ENV: 'production',
+      BETTER_AUTH_SECRET: 'a-real-production-secret-value-32chars',
+    });
+    expect(config.NODE_ENV).toBe('production');
+  });
+
   it('aborts when DATABASE_URL is missing (AC-007)', () => {
     const { DATABASE_URL: _omit, ...rest } = base;
     expect(() => loadConfig(rest)).toThrow(/DATABASE_URL/);

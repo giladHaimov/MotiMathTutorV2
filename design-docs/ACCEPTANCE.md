@@ -51,13 +51,13 @@ No release evidence may use a mocked application API or mocked database.
 
 ### Foundation, identity, and ownership
 
-- **AC-001** Registration and login use the real selected authentication library and PostgreSQL.
+- **AC-001** Registration and login use Better Auth cookie sessions against real PostgreSQL (browser and Capacitor). JWT bearer / `set-auth-token` is not the auth architecture.
 - **AC-002** Logged-out access to every protected API is rejected.
 - **AC-003** Logout prevents subsequent protected access.
 - **AC-004** A pseudonymous `user_profiles` row exists without duplicating email into learning records.
 - **AC-005** Student A cannot read or modify Student B’s session.
 - **AC-006** Student A cannot read Student B’s attempts/events through any public route.
-- **AC-007** Missing required secret or DB configuration aborts startup.
+- **AC-007** Missing required secret or DB configuration aborts startup. In production, `BETTER_AUTH_SECRET` has no insecure default (compose and app fail closed); `/health` never becomes healthy without it.
 
 ### Content and disclosure
 
@@ -119,7 +119,7 @@ No release evidence may use a mocked application API or mocked database.
 - **AC-048** Temporary response loss followed by retry does not duplicate state.
 - **AC-049** App refresh/restart resumes exact authoritative server state.
 - **AC-050** UI never performs semantic validation as the source of truth.
-- **AC-051** Human mobile smoke verifies chunk reveal, slot assignment, deletion, retry, and resume.
+- **AC-051** Human mobile smoke verifies chunk reveal, slot assignment, deletion, retry, and resume. Capacitor auth uses the same Better Auth cookie sessions as the browser (same-origin `server.url`); Origin/User-Agent/client-platform headers are not native-client proof.
 
 ### Container and release
 
@@ -169,7 +169,7 @@ The release suite contains the following 15 scenarios.
 | Student reads another session | 404 or 403 consistently |
 | Student submits action to another session | Rejected; no attempt/state change |
 | Student requests raw problem definition | No public route / rejected |
-| Logged-out token/session used | Rejected |
+| Logged-out cookie/session used | Rejected |
 | Content import through public API | No public route |
 
 ---

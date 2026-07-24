@@ -204,11 +204,11 @@ A deterministic server action that returns the learner to an earlier reasoning s
 
 ### Authentication and authorization
 
-- **PB-022** Authentication is real and server-validated.
+- **PB-022** Authentication is real and server-validated via Better Auth **cookie sessions** (browser and Capacitor). Capacitor loads the SPA from the configured API/server origin so cookies remain same-origin. JWT bearer authentication, `set-auth-token` issuance, and native-client proof via `Origin` / `User-Agent` / client-platform headers are **not** part of the product. Native clients are public clients.
 - **PB-023** Every learning session belongs to one authenticated student.
 - **PB-024** A student cannot read or modify another student’s profile, sessions, attempts, events, or history.
 - **PB-025** Authorization is enforced by the backend, not only by UI visibility.
-- **PB-026** Logout invalidates protected access according to the selected authentication library’s session model.
+- **PB-026** Logout invalidates protected access according to the selected authentication library’s session model (cookie session invalidation).
 
 ### Data and logging
 

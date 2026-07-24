@@ -23,7 +23,9 @@ services:
       NODE_ENV: production
       PORT: 8080
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/reasoning_tutor
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-compose-only-example-secret-change-me}
+      # Required in production — no default secret. Compose fails closed if unset/empty:
+      #   BETTER_AUTH_SECRET=… docker compose up
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
       BETTER_AUTH_URL: http://localhost:8080
       TRUSTED_ORIGINS: http://localhost:8080
       LOG_LEVEL: info

@@ -71,50 +71,88 @@ export function isAddressInTrustedProxies(address: string, trustedProxies: strin
   return list.check(peer, version === 4 ? 'ipv4' : 'ipv6');
 }
 
-const configSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(8080),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  BETTER_AUTH_SECRET: z.string().min(16, 'BETTER_AUTH_SECRET must be at least 16 characters'),
-  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL must be a valid URL'),
-  TRUSTED_ORIGINS: z
-    .string()
-    .default('')
-    .transform((v) =>
-      v
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    ),
-  /**
-   * Proxies trusted to set X-Forwarded-For. Default empty (safe): Fastify
-   * trustProxy is false and Better Auth ignores X-Forwarded-For, so direct
-   * clients cannot spoof their IP for auth rate limits. Behind a reverse
-   * proxy, set explicit IP/CIDR entries only (never blank-trust-all).
-   */
-  TRUSTED_PROXIES: z
-    .string()
-    .default('')
-    .transform((v) =>
-      v
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    )
-    .superRefine((entries, ctx) => {
-      for (const entry of entries) {
-        if (!isTrustedProxyEntry(entry)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `TRUSTED_PROXIES entry "${entry}" must be an IP or CIDR`,
-          });
+const configSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+    DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+    BETTER_AUTH_SECRET: z.string().min(16, 'BETTER_AUTH_SECRET must be at least 16 characters'),
+    BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL must be a valid URL'),
+    TRUSTED_ORIGINS: z
+      .string()
+      .default('')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    /**
+     * Proxies trusted to set X-Forwarded-For. Default empty (safe): Fastify
+     * trustProxy is false and Better Auth ignores X-Forwarded-For, so direct
+     * clients cannot spoof their IP for auth rate limits. Behind a reverse
+     * proxy, set explicit IP/CIDR entries only (never blank-trust-all).
+     */
+    TRUSTED_PROXIES: z
+      .string()
+      .default('')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      )
+      .superRefine((entries, ctx) => {
+        for (const entry of entries) {
+          if (!isTrustedProxyEntry(entry)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `TRUSTED_PROXIES entry "${entry}" must be an IP or CIDR`,
+            });
+          }
         }
-      }
-    }),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-  ENGINE_VERSION: z.string().min(1).default('1.0.0'),
-  CONTENT_SEED_MODE: z.enum(['off', 'import']).default('off'),
-});
+      }),
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
+    ENGINE_VERSION: z.string().min(1).default('1.0.0'),
+    CONTENT_SEED_MODE: z.enum(['off', 'import']).default('off'),
+  })
+  .superRefine((data, ctx) => {
+    // Production must never start with a missing, empty, or known placeholder secret.
+    if (data.NODE_ENV !== 'production') return;
+    const secret = data.BETTER_AUTH_SECRET;
+    if (!secret || secret.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['BETTER_AUTH_SECRET'],
+        message: 'BETTER_AUTH_SECRET is required in production',
+      });
+      return;
+    }
+    if (isInsecurePlaceholderSecret(secret)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['BETTER_AUTH_SECRET'],
+        message:
+          'BETTER_AUTH_SECRET must not be a documented example/placeholder value in production',
+      });
+    }
+  });
+
+/** Known example secrets that must never be used when NODE_ENV=production. */
+export function isInsecurePlaceholderSecret(secret: string): boolean {
+  const normalized = secret.trim().toLowerCase();
+  const placeholders = [
+    'compose-only-example-secret-change-me',
+    'dev-only-example-secret-change-me-please-32',
+    'change-me',
+    'changeme',
+    'secret',
+    'password',
+  ];
+  return placeholders.some((p) => normalized === p || normalized.includes('example-secret'));
+}
 
 export type AppConfig = Omit<
   z.infer<typeof configSchema>,

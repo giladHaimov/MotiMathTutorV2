@@ -185,8 +185,19 @@ State lives in cloud.
 - Separate user identity from behavioral analytics
 - Prepare for GDPR / Israeli privacy compliance
 - Encrypt traffic (HTTPS)
-- Token-based authentication (JWT)
+- Authentication: Better Auth **HTTP cookie sessions** for browser and Capacitor
+  (same-origin Capacitor packaging via configured API/`server.url`).
+- Native mobile clients are **public clients**. Caller-controlled signals
+  (`Origin`, `User-Agent`, localhost/`capacitor://` origins, `X-Client-Platform`,
+  and similar headers) must never be treated as proof of a trusted native app.
+- JWT bearer tokens, `set-auth-token` issuance, and header/origin “native proof”
+  were **intentionally removed**: a public Capacitor app cannot cryptographically
+  prove “native” to the server with caller-controlled headers alone. Any future
+  non-cookie auth requires a separately reviewed OAuth/OIDC Authorization Code +
+  PKCE or device/app-bound cryptographic design.
 
+> Obsolete history (not active): early Product Book drafts mentioned “Token-based
+> authentication (JWT)”. That is **not** the implemented architecture.
 # 10. Long-Term Expansion
 
 **Architecture generalizes to:**

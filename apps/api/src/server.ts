@@ -30,6 +30,12 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('Fatal startup error:', err);
+  const message = err instanceof Error ? err.message : String(err);
+  console.error('Fatal startup error:', message);
+  if (/BETTER_AUTH_SECRET/i.test(message)) {
+    console.error(
+      'BETTER_AUTH_SECRET is required in production and must not be a placeholder. Set a strong secret and restart.',
+    );
+  }
   process.exit(1);
 });
