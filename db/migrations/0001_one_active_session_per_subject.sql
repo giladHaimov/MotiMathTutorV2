@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "learning_sessions_one_active_per_subject_uq" ON "learning_sessions" USING btree ("analytics_subject_id") WHERE "learning_sessions"."status" = 'ACTIVE';

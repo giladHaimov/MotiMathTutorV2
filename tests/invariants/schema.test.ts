@@ -41,4 +41,23 @@ describe('schema invariants (clean migration, AC-053)', () => {
     const names = rows.rows.map((r) => r.indexname);
     expect(names).toContain('stage_attempts_session_client_uq');
   });
+
+  it('enforces at most one ACTIVE learning_session per subject via a partial unique index', async () => {
+    const rows = (await db.execute(
+      sql`select indexdef from pg_indexes
+          where schemaname = 'public'
+            and tablename = 'learning_sessions'
+            and indexname = 'learning_sessions_one_active_per_subject_uq'`,
+    )) as unknown as { rows: Array<{ indexdef: string }> };
+    expect(rows.rows).toHaveLength(1);
+
+    const def = rows.rows[0]!.indexdef;
+    // Unique, on the right table/column, gated by the right partial predicate —
+    // this is the DB-level enforcement that startSession's ON CONFLICT relies on
+    // (concurrent session-start race, PRODUCT_BOOK §11.1/§11.3).
+    expect(def).toMatch(/CREATE UNIQUE INDEX/i);
+    expect(def).toMatch(/ON public\.learning_sessions/i);
+    expect(def).toMatch(/\(analytics_subject_id\)/);
+    expect(def).toMatch(/WHERE \(status = 'ACTIVE'::text\)/);
+  });
 });
