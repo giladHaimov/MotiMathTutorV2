@@ -5,54 +5,62 @@ Record every Observable Result. Fail the scenario if any step diverges.
 
 ## Environment
 
-| Item                 | Value                                                                                                                                                    |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API + PostgreSQL     | `docker compose up -d postgres` then API on `http://localhost:8080` (or deployed HTTPS API that also serves the SPA)                                     |
-| Auth                 | Better Auth **cookie sessions** only. Capacitor loads the SPA from the API origin (`CAPACITOR_SERVER_URL`) so cookies are same-origin. No bearer tokens. |
-| Production allowlist | Set `VITE_PRODUCTION_API_ORIGINS=https://your-api.example` (comma-separated HTTPS origins). Selected `CAPACITOR_SERVER_URL` must exactly match.          |
+| Item                 | Value                                                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API + PostgreSQL     | `docker compose up -d postgres` then API on `http://localhost:8080` (or deployed HTTPS API that also serves the SPA)                                 |
+| Auth                 | Better Auth **cookie sessions** only. Capacitor loads the SPA from the API origin (`VITE_CAPACITOR_SERVER_URL`) so cookies are same-origin.          |
+| Production allowlist | Set `VITE_PRODUCTION_API_ORIGINS=https://your-api.example` (comma-separated HTTPS origins). Selected `VITE_CAPACITOR_SERVER_URL` must exactly match. |
+| Canonical origin env | **`VITE_CAPACITOR_SERVER_URL` only** — used by `capacitor.config.ts` (sync) and the Vite-bundled runtime assert. Do not use a second alias.          |
 
 ### Exact build / run commands
 
-**HTTP development (emulator/device → local API; cleartext allowed in Android debug only):**
+**HTTP development (emulator/simulator → local API):**
+
+Android emulator (debug cleartext source set):
 
 ```bash
-# Android emulator → host machine API
-export CAPACITOR_SERVER_URL=http://10.0.2.2:8080
-# Physical device on LAN (replace with host LAN IP)
-# export CAPACITOR_SERVER_URL=http://192.168.1.10:8080
-
+export VITE_CAPACITOR_HTTP_DEV=1
+export VITE_CAPACITOR_SERVER_URL=http://10.0.2.2:8080
 npm run cap:dev --workspace @app/web
-# or from apps/web after install:
-#   CAPACITOR_SERVER_URL=http://10.0.2.2:8080 npm run cap:dev
-
-npx cap run android   # debug build; cleartext permitted only in debug source set
-# npx cap run ios
-```
-
-Root convenience scripts:
-
-```bash
-CAPACITOR_SERVER_URL=http://10.0.2.2:8080 npm run cap:dev
 cd apps/web && npx cap run android
 ```
 
-**Production / release packaging (HTTPS + allowlist; cleartext forbidden):**
+iOS Simulator (Debug configuration → `Info-Debug.plist` ATS for localhost/127.0.0.1):
+
+```bash
+export VITE_CAPACITOR_HTTP_DEV=1
+export VITE_CAPACITOR_SERVER_URL=http://127.0.0.1:8080
+npm run cap:dev --workspace @app/web
+cd apps/web && npx cap run ios --configuration Debug
+# equivalent: npm run cap:run:ios:dev --workspace @app/web
+```
+
+Physical device on LAN (replace host IP; Android debug / iOS Debug only):
+
+```bash
+export VITE_CAPACITOR_HTTP_DEV=1
+export VITE_CAPACITOR_SERVER_URL=http://192.168.1.10:8080
+npm run cap:dev --workspace @app/web
+```
+
+**Production / release packaging (HTTPS + allowlist; no cleartext / no Debug ATS):**
 
 ```bash
 export VITE_PRODUCTION_API_ORIGINS=https://api.example.com
-export CAPACITOR_SERVER_URL=https://api.example.com
+export VITE_CAPACITOR_SERVER_URL=https://api.example.com
 export CAPACITOR_PACKAGE_MODE=production
 npm run cap:release --workspace @app/web
 cd apps/web && npx cap run android --configuration release
-# or: ./gradlew assembleRelease
+# iOS Release uses App/Info.plist (secure ATS defaults — no HTTP exceptions):
+cd apps/web && npx cap run ios --configuration Release
 ```
 
-| Mode        | Command                                               | HTTP cleartext                   |
-| ----------- | ----------------------------------------------------- | -------------------------------- |
-| Development | `npm run cap:dev` (+ `CAPACITOR_SERVER_URL=http://…`) | Yes — Android **debug** only     |
-| Release     | `npm run cap:release` (+ HTTPS allowlisted URL)       | No — release/main deny cleartext |
+| Mode        | Command                                                               | HTTP cleartext / ATS                                         |
+| ----------- | --------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Development | `npm run cap:dev` + `VITE_CAPACITOR_SERVER_URL=http://…`              | Android **debug** only; iOS **Debug** (`Info-Debug.plist`)   |
+| Release     | `npm run cap:release` + HTTPS allowlisted `VITE_CAPACITOR_SERVER_URL` | Android release denies; iOS Release uses secure `Info.plist` |
 
-Browser builds must not set `VITE_API_BASE_URL`. Prefer Capacitor `server.url` same-origin cookies over absolute API bases.
+Browser builds must not set `VITE_API_BASE_URL`. Prefer `VITE_CAPACITOR_SERVER_URL` same-origin cookies.
 
 ## Preconditions
 
@@ -159,4 +167,4 @@ UI `state_version`, visible chunks, and slot labels **equal** the SQL row. Clien
 
 Owner sign-off: ______________________ Date: __________
 
-**Note:** `ALLOW_IOS_SMOKE_SKIP=1` in verify is **not** SCN-15 evidence. This checklist is the AC-051 / Gate C proof.
+**Note:** `ALLOW_IOS_SMOKE_SKIP=1` in verify is **not** SCN-15 evidence. This checklist is the AC-051 / Gate C proof. macOS CI job `ios-smoke` is the automated AC-047 gate.

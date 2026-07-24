@@ -2,14 +2,15 @@
  * Native Capacitor API origin policy.
  *
  * - Browser: always same-origin relative URLs (ignores native env vars).
- * - Native production: HTTPS origin-only AND exact match against the explicit
- *   production allowlist (`VITE_PRODUCTION_API_ORIGINS`).
- * - Native capacitor-http-dev: HTTP allowed only when CAPACITOR_HTTP_DEV=1 /
- *   VITE_CAPACITOR_HTTP_DEV=1 (explicit development build).
+ * - Native production: HTTPS origin-only AND exact match against
+ *   `VITE_PRODUCTION_API_ORIGINS`.
+ * - Native HTTP-dev: HTTP allowed only when `VITE_CAPACITOR_HTTP_DEV=1`.
  *
- * Preferred Capacitor packaging loads the SPA from the API origin via
- * `server.url` (cookie same-origin). Absolute VITE_API_BASE_URL is optional.
+ * Preferred packaging loads the SPA from `VITE_CAPACITOR_SERVER_URL` (same-origin
+ * cookies). Absolute `VITE_API_BASE_URL` is optional.
  */
+
+import { CAPACITOR_SERVER_ORIGIN_ENV } from './capacitor-env.js';
 
 export type ClientRuntimeMode = 'development' | 'production' | 'test';
 
@@ -88,7 +89,6 @@ export function resolveNativeApiBaseUrl(
     return origin;
   }
 
-  // development / test
   if (origin.startsWith('http://') && !httpDev) {
     throw new Error(
       'HTTP native API origins require explicit Capacitor HTTP development mode (VITE_CAPACITOR_HTTP_DEV=1)',
@@ -105,8 +105,6 @@ export function apiBaseUrlForRuntime(options: {
   httpDev?: boolean;
   productionAllowlistRaw?: string;
 }): string {
-  // Browser configuration is intentionally separate: never use the native env var.
-  // Capacitor packaged with server.url (same-origin cookies) also uses relative URLs.
   if (!options.isNative) return '';
   if (options.viteApiBaseUrl === '' || options.viteApiBaseUrl === undefined) {
     return '';
@@ -128,9 +126,9 @@ export function assertProductionNativePackageOrigin(
   serverUrl: string,
   allowlistRaw: string | undefined,
 ): string {
-  const origin = parseOriginOnly(serverUrl, 'Capacitor server.url');
+  const origin = parseOriginOnly(serverUrl, CAPACITOR_SERVER_ORIGIN_ENV);
   if (!origin.startsWith('https://')) {
-    throw new Error('Production Capacitor server.url must be https://');
+    throw new Error(`Production ${CAPACITOR_SERVER_ORIGIN_ENV} must be https://`);
   }
   const allowlist = parseOriginAllowlist(allowlistRaw);
   if (allowlist.length === 0) {
@@ -138,7 +136,7 @@ export function assertProductionNativePackageOrigin(
   }
   if (!allowlist.includes(origin)) {
     throw new Error(
-      `Capacitor server.url ${origin} is not in VITE_PRODUCTION_API_ORIGINS allowlist`,
+      `${CAPACITOR_SERVER_ORIGIN_ENV} origin ${origin} is not in VITE_PRODUCTION_API_ORIGINS allowlist`,
     );
   }
   return origin;
@@ -164,7 +162,7 @@ export function assertNativeRuntimeOrigins(options: {
     const packageOrigin = options.capacitorServerUrl?.trim() || options.viteApiBaseUrl?.trim();
     if (!packageOrigin) {
       throw new Error(
-        'Production native builds require VITE_CAPACITOR_SERVER_URL (preferred) or VITE_API_BASE_URL',
+        `Production native builds require ${CAPACITOR_SERVER_ORIGIN_ENV} (or VITE_API_BASE_URL)`,
       );
     }
     assertProductionNativePackageOrigin(packageOrigin, options.productionAllowlistRaw);
@@ -183,8 +181,6 @@ export function assertNativeRuntimeOrigins(options: {
     });
   }
   if (options.capacitorServerUrl?.trim()?.startsWith('http://') && options.httpDev !== true) {
-    throw new Error(
-      'HTTP Capacitor server.url requires explicit Capacitor HTTP development mode (VITE_CAPACITOR_HTTP_DEV=1)',
-    );
+    throw new Error(`HTTP ${CAPACITOR_SERVER_ORIGIN_ENV} requires VITE_CAPACITOR_HTTP_DEV=1`);
   }
 }

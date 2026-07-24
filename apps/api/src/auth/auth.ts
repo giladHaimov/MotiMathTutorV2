@@ -13,8 +13,7 @@ import * as authSchema from '../db/schema/auth-schema.js';
  *
  * Authentication for web and Capacitor is **cookie session only**. Capacitor
  * packages load the SPA from the API origin (`server.url`) so cookies are
- * same-origin. No bearer plugin: a public app cannot prove "native" via
- * caller-controlled headers/Origin checks.
+ * same-origin. Caller-controlled headers/Origin checks are not used for auth.
  *
  * Rate limiting uses Better Auth defaults (including the 3/10s special rule for
  * sign-up/sign-in). Those limits are never weakened. X-Forwarded-For is honored

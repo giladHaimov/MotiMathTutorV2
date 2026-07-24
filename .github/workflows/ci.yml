@@ -43,10 +43,23 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies (clean)
         run: npm ci
 
-      - name: Capacitor iOS build smoke
+      - name: Build web + Capacitor sync android/ios
+        run: |
+          npm run build --workspace @app/web
+          (cd apps/web && npx cap sync android)
+          (cd apps/web && npx cap sync ios)
+
+      - name: Assert no stale secure-storage in iOS Podfile after sync
+        run: |
+          if grep -qi 'aparajita\|secure-storage\|SecureStorage' apps/web/ios/App/Podfile apps/web/ios/App/Podfile.lock; then
+            echo "stale secure-storage references remain after cap sync" >&2
+            exit 1
+          fi
+
+      - name: Capacitor iOS build smoke (pod install + xcodebuild Debug/Release)
         env:
           # Must NOT set ALLOW_IOS_SMOKE_SKIP — fail if Xcode/build unavailable.
           VERIFY_REQUIRE_IOS: '1'

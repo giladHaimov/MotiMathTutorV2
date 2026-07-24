@@ -3,12 +3,22 @@ import type { CapacitorConfig } from '@capacitor/cli';
 /**
  * Same Vite web build runs in browser and Capacitor (PB-041 / AC-045–047).
  *
- * Auth: Better Auth cookie sessions. Preferred packaging sets `server.url` to the
- * API origin so the WebView is same-origin with `/api` cookies (no bearer tokens).
+ * Auth: Better Auth cookie sessions. Packaging sets `server.url` from the
+ * canonical env key `VITE_CAPACITOR_SERVER_URL` (same name embedded by Vite for
+ * runtime asserts in `src/lib/capacitor-env.ts` — keep them identical).
  *
- * HTTP cleartext is allowed only when CAPACITOR_HTTP_DEV=1 / VITE_CAPACITOR_HTTP_DEV=1
- * (explicit `npm run cap:dev` development mode). Release packages must use HTTPS.
+ * HTTP cleartext is allowed only when VITE_CAPACITOR_HTTP_DEV=1
+ * (explicit `npm run cap:dev`). Release packages must use HTTPS.
+ *
+ * NOTE: This file is loaded by Cap CLI via require() — do not import from src/.
  */
+
+/** Must match CAPACITOR_SERVER_ORIGIN_ENV in src/lib/capacitor-env.ts */
+const SERVER_ORIGIN_ENV = 'VITE_CAPACITOR_SERVER_URL';
+/** Must match CAPACITOR_HTTP_DEV_ENV in src/lib/capacitor-env.ts */
+const HTTP_DEV_ENV = 'VITE_CAPACITOR_HTTP_DEV';
+/** Must match PRODUCTION_API_ORIGINS_ENV in src/lib/capacitor-env.ts */
+const PRODUCTION_ORIGINS_ENV = 'VITE_PRODUCTION_API_ORIGINS';
 
 function parseOriginOnly(raw: string, label: string): string {
   const value = raw.trim();
@@ -36,36 +46,33 @@ function parseAllowlist(raw: string | undefined): string[] {
     .map((entry) => parseOriginOnly(entry, `Allowlist entry ${entry}`));
 }
 
-const httpDev =
-  process.env.CAPACITOR_HTTP_DEV === '1' || process.env.VITE_CAPACITOR_HTTP_DEV === '1';
+const httpDev = process.env[HTTP_DEV_ENV] === '1';
 const packageMode = process.env.CAPACITOR_PACKAGE_MODE ?? (httpDev ? 'development' : 'local');
-const serverUrlRaw = process.env.CAPACITOR_SERVER_URL ?? process.env.VITE_CAPACITOR_SERVER_URL;
+const serverUrlRaw = process.env[SERVER_ORIGIN_ENV]?.trim();
 
 let serverUrl: string | undefined;
 if (serverUrlRaw) {
-  const origin = parseOriginOnly(serverUrlRaw, 'CAPACITOR_SERVER_URL');
+  const origin = parseOriginOnly(serverUrlRaw, SERVER_ORIGIN_ENV);
   if (packageMode === 'production') {
     if (!origin.startsWith('https://')) {
-      throw new Error('Production Capacitor server.url must be https://');
+      throw new Error(`Production ${SERVER_ORIGIN_ENV} must be https://`);
     }
-    const allowlist = parseAllowlist(process.env.VITE_PRODUCTION_API_ORIGINS);
+    const allowlist = parseAllowlist(process.env[PRODUCTION_ORIGINS_ENV]);
     if (allowlist.length === 0) {
-      throw new Error('VITE_PRODUCTION_API_ORIGINS is required for production Capacitor packaging');
+      throw new Error(`${PRODUCTION_ORIGINS_ENV} is required for production Capacitor packaging`);
     }
     if (!allowlist.includes(origin)) {
       throw new Error(
-        `Capacitor server.url ${origin} is not in VITE_PRODUCTION_API_ORIGINS allowlist`,
+        `${SERVER_ORIGIN_ENV} origin ${origin} is not in ${PRODUCTION_ORIGINS_ENV} allowlist`,
       );
     }
   } else if (origin.startsWith('http://') && !httpDev) {
-    throw new Error(
-      'HTTP CAPACITOR_SERVER_URL requires CAPACITOR_HTTP_DEV=1 (use npm run cap:dev)',
-    );
+    throw new Error(`HTTP ${SERVER_ORIGIN_ENV} requires ${HTTP_DEV_ENV}=1 (use npm run cap:dev)`);
   }
   serverUrl = origin;
 } else if (packageMode === 'production') {
   throw new Error(
-    'Production Capacitor packaging requires CAPACITOR_SERVER_URL (HTTPS, allowlisted)',
+    `Production Capacitor packaging requires ${SERVER_ORIGIN_ENV} (HTTPS, allowlisted)`,
   );
 }
 

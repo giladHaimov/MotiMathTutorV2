@@ -5,8 +5,7 @@ import { apiBaseUrl, assertPlatformApiOrigins } from '../platform.js';
  * Thin API client. The client only renders server state and sends structured
  * actions — it never decides semantic validity (PB-039 / AC-050).
  *
- * Authentication: Better Auth **cookie sessions** for browser and Capacitor
- * (`credentials: 'include'`). No bearer tokens are issued or stored.
+ * Authentication: Better Auth cookie sessions (`credentials: 'include'`).
  */
 
 export interface ApiError {

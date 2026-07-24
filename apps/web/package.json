@@ -8,12 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "cap:sync": "npm run build && npx cap sync",
-    "cap:dev": "CAPACITOR_HTTP_DEV=1 VITE_CAPACITOR_HTTP_DEV=1 CAPACITOR_PACKAGE_MODE=development vite build --mode development && CAPACITOR_HTTP_DEV=1 VITE_CAPACITOR_HTTP_DEV=1 CAPACITOR_PACKAGE_MODE=development npx cap sync",
-    "cap:release": "CAPACITOR_PACKAGE_MODE=production CAPACITOR_REQUIRE_SERVER_URL=1 vite build --mode production && CAPACITOR_PACKAGE_MODE=production npx cap sync",
+    "cap:dev": "VITE_CAPACITOR_HTTP_DEV=1 CAPACITOR_PACKAGE_MODE=development vite build --mode development && VITE_CAPACITOR_HTTP_DEV=1 CAPACITOR_PACKAGE_MODE=development npx cap sync",
+    "cap:release": "CAPACITOR_PACKAGE_MODE=production vite build --mode production && CAPACITOR_PACKAGE_MODE=production npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",
     "cap:run:android:dev": "npm run cap:dev && npx cap run android",
-    "cap:run:ios:dev": "npm run cap:dev && npx cap run ios"
+    "cap:run:ios:dev": "npm run cap:dev && npx cap run ios --configuration Debug"
   },
   "dependencies": {
     "@app/contracts": "*",

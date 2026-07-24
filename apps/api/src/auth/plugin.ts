@@ -21,7 +21,7 @@ declare module 'fastify' {
  * Mount Better Auth's handler at /api/auth/* (ARCHITECTURE §6). Better Auth owns
  * registration, login, logout, and session cookies (AC-001/003).
  *
- * Cookie sessions only — never forward `set-auth-token` / bearer issuance.
+ * Cookie sessions only — headers are forwarded as returned by Better Auth.
  */
 export function registerAuthRoutes(app: FastifyInstance): void {
   app.route({
@@ -43,17 +43,6 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       reply.status(response.status);
       response.headers.forEach((value, key) => {
         const lower = key.toLowerCase();
-        // Strip any bearer-token issuance headers if a plugin ever reintroduces them.
-        if (lower === 'set-auth-token') return;
-        if (lower === 'access-control-expose-headers') {
-          const filtered = value
-            .split(',')
-            .map((h) => h.trim())
-            .filter((h) => h.toLowerCase() !== 'set-auth-token');
-          if (filtered.length === 0) return;
-          reply.header(key, filtered.join(', '));
-          return;
-        }
         if (lower === 'set-cookie') {
           reply.header('set-cookie', value);
         } else {

@@ -4,14 +4,21 @@ import {
   viteModeToRuntime,
   type ClientRuntimeMode,
 } from './api-base-url.js';
+import {
+  CAPACITOR_HTTP_DEV_ENV,
+  CAPACITOR_SERVER_ORIGIN_ENV,
+  PRODUCTION_API_ORIGINS_ENV,
+  readCapacitorHttpDev,
+  readCapacitorServerOrigin,
+  readProductionApiOrigins,
+} from './capacitor-env.js';
 
 /**
  * Thin Capacitor/platform helpers. Semantic validity is never decided here —
  * packaging, connectivity, and app lifecycle only (ARCHITECTURE §17).
  *
- * Authentication is Better Auth **cookie sessions** for both browser and
- * Capacitor WebView (same-origin via Capacitor `server.url` when packaged).
- * No bearer tokens / caller-controlled native proofs.
+ * Authentication is Better Auth cookie sessions for browser and Capacitor
+ * WebView (same-origin via `VITE_CAPACITOR_SERVER_URL` / server.url).
  */
 
 export function isNativePlatform(): boolean {
@@ -29,11 +36,14 @@ function runtimeMode(): ClientRuntimeMode {
 }
 
 function httpDevEnabled(): boolean {
-  return import.meta.env.VITE_CAPACITOR_HTTP_DEV === '1';
+  return readCapacitorHttpDev({
+    [CAPACITOR_HTTP_DEV_ENV]: import.meta.env.VITE_CAPACITOR_HTTP_DEV,
+  });
 }
 
 /**
  * Fail build/startup when production native origin policy is violated.
+ * Uses the same env key as capacitor.config.ts (`VITE_CAPACITOR_SERVER_URL`).
  */
 export function assertPlatformApiOrigins(): void {
   assertNativeRuntimeOrigins({
@@ -41,8 +51,12 @@ export function assertPlatformApiOrigins(): void {
     mode: runtimeMode(),
     httpDev: httpDevEnabled(),
     viteApiBaseUrl: import.meta.env.VITE_API_BASE_URL,
-    capacitorServerUrl: import.meta.env.VITE_CAPACITOR_SERVER_URL,
-    productionAllowlistRaw: import.meta.env.VITE_PRODUCTION_API_ORIGINS,
+    capacitorServerUrl: readCapacitorServerOrigin({
+      [CAPACITOR_SERVER_ORIGIN_ENV]: import.meta.env.VITE_CAPACITOR_SERVER_URL,
+    }),
+    productionAllowlistRaw: readProductionApiOrigins({
+      [PRODUCTION_API_ORIGINS_ENV]: import.meta.env.VITE_PRODUCTION_API_ORIGINS,
+    }),
   });
 }
 
@@ -57,7 +71,9 @@ export function apiBaseUrl(): string {
     viteApiBaseUrl: import.meta.env.VITE_API_BASE_URL,
     mode: runtimeMode(),
     httpDev: httpDevEnabled(),
-    productionAllowlistRaw: import.meta.env.VITE_PRODUCTION_API_ORIGINS,
+    productionAllowlistRaw: readProductionApiOrigins({
+      [PRODUCTION_API_ORIGINS_ENV]: import.meta.env.VITE_PRODUCTION_API_ORIGINS,
+    }),
   });
 }
 
