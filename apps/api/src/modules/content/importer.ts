@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { loadCanonicalFixtures, type ProblemFixture } from '@app/problem-content';
 import type { Db } from '../../db/index.js';
 import {
@@ -123,6 +123,22 @@ async function importOne(
       .returning({ id: problems.id });
     problemId = row!.id;
     summary.problems += 1;
+
+    // Activate this version for new sessions: retire older versions of the same
+    // problem_key in this program (J-11). Existing sessions remain pinned.
+    if (fixture.problem.status === 'ACTIVE') {
+      await tx
+        .update(problems)
+        .set({ status: 'RETIRED' })
+        .where(
+          and(
+            eq(problems.programId, programId),
+            eq(problems.problemKey, fixture.problem.problem_key),
+            eq(problems.status, 'ACTIVE'),
+            ne(problems.id, problemId),
+          ),
+        );
+    }
 
     // Chunks — store the tokens alongside the semantic definition so the public
     // serializer can expose only visible-chunk tokens.

@@ -25,6 +25,11 @@ export default defineConfig({
           exclude: ['**/node_modules/**', '**/dist/**'],
           // Integration tests share a real database; run serially to keep assertions deterministic.
           fileParallelism: false,
+          maxWorkers: 1,
+          pool: 'forks',
+          poolOptions: {
+            forks: { singleFork: true },
+          },
           hookTimeout: 120_000,
           testTimeout: 60_000,
           globalSetup: ['tests/integration/global-setup.ts'],

@@ -25,6 +25,15 @@ const problemDefinition: EngineProblemDefinition = {
       label: 'students who wear glasses',
     },
   ],
+  invalid_assignments: [
+    {
+      token_id: 'ex01-c1-percent',
+      slot: 'WHOLE',
+      misconception_code: 'WHOLE_PART_CONFUSION',
+    },
+  ],
+  fact_establishments: [],
+  sufficiency_dependencies: [],
   chunk_count: 3,
   gates: [
     { reveals_chunk_index: 1, requires_commitment: 'WHOLE_IDENTIFIED' },
@@ -49,6 +58,7 @@ const baseInput: SerializeInput = {
       { slot: 'PART_IN_NUMBER', token_id: null, label: null },
       { slot: 'UNKNOWN', token_id: null, label: null },
     ],
+    pending_acknowledgment: null,
   },
   acceptedCommitments: [],
   chunks: [
@@ -126,6 +136,7 @@ describe('buildPublicSession (allowlist serializer)', () => {
           { slot: 'PART_IN_NUMBER', token_id: null, label: null },
           { slot: 'UNKNOWN', token_id: null, label: null },
         ],
+        pending_acknowledgment: null,
       },
     });
     expect(publicSession.allowed_actions).toContain('SUBMIT_COMMITMENT');
@@ -145,6 +156,7 @@ describe('buildPublicSession (allowlist serializer)', () => {
           { slot: 'PART_IN_NUMBER', token_id: null, label: null },
           { slot: 'UNKNOWN', token_id: 'ex01-c2-unknown', label: 'students who wear glasses' },
         ],
+        pending_acknowledgment: null,
       },
     });
     expect(publicSession.allowed_actions).toContain('SUBMIT_FINAL_ANSWER');

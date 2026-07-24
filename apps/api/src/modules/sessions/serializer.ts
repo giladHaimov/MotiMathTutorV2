@@ -41,7 +41,10 @@ export function buildPublicSession(input: SerializeInput): PublicSession {
   const engineState = {
     status: input.status,
     current_chunk_index: input.currentChunkIndex,
-    workspace: input.workspace,
+    workspace: {
+      slots: input.workspace.slots,
+      pending_acknowledgment: input.workspace.pending_acknowledgment ?? null,
+    },
     accepted_commitments: input.acceptedCommitments,
   };
 

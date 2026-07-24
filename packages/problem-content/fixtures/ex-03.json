@@ -7,7 +7,7 @@
   },
   "problem": {
     "problem_key": "EX-03",
-    "version": 1,
+    "version": 2,
     "domain": "FRACTION",
     "title": "Fraction: distinguish read from remaining",
     "difficulty_level": 3,
@@ -35,7 +35,26 @@
           "label": "pages that remain unread"
         }
       ],
-      "invalid_assignments": [],
+      "invalid_assignments": [
+        {
+          "token_id": "ex03-c0-fraction",
+          "slot": "UNKNOWN",
+          "misconception_code": "COMPLEMENT_CONFUSION"
+        }
+      ],
+      "fact_establishments": [
+        { "fact": "READ_FRACTION", "revealed_at_chunk_index": 0 },
+        { "fact": "WHOLE", "revealed_at_chunk_index": 1 }
+      ],
+      "sufficiency_dependencies": [
+        {
+          "action_type": "SUBMIT_FINAL_ANSWER",
+          "requires_facts": ["WHOLE"],
+          "misconception_code": "PREMATURE_QUANTIFICATION",
+          "requires_acknowledgment": true,
+          "message": "The whole is not known yet. Acknowledge that information is insufficient before continuing."
+        }
+      ],
       "gates": [
         { "reveals_chunk_index": 1, "requires_commitment": "READ_FRACTION_IDENTIFIED" },
         { "reveals_chunk_index": 2, "requires_commitment": "WHOLE_IDENTIFIED" }
