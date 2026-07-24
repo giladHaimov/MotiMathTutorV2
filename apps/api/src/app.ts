@@ -40,9 +40,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('appConfig', config);
 
   // CORS with credentials so the Better Auth cookie session works cross-origin in dev.
+  // Expose set-auth-token for the Capacitor bearer/session-token path.
   await app.register(cors, {
     origin: config.TRUSTED_ORIGINS.length > 0 ? config.TRUSTED_ORIGINS : false,
     credentials: true,
+    exposedHeaders: ['set-auth-token'],
   });
 
   // Rate limiting on the whole surface; auth + action submission are the sensitive ones.

@@ -1,36 +1,51 @@
 import { useState } from 'react';
 import type { PublicSession, Slot } from '@app/contracts';
 
+export type ProblemUx = 'idle' | 'submitting' | 'conflict' | 'retry' | 'offline' | 'fatal';
+
 export function ProblemView({
   session,
   banner,
+  ux,
+  pending,
+  submitting,
   onAssign,
   onDelete,
   onContinue,
   onAcknowledge,
   onSubmitAnswer,
+  onRetry,
   onReload,
   onBack,
 }: {
   session: PublicSession;
   banner: string | null;
+  ux: ProblemUx;
+  pending: boolean;
+  submitting: boolean;
   onAssign: (slot: Slot, tokenId: string) => void;
   onDelete: (slot: Slot) => void;
   onContinue: () => void;
   onAcknowledge: () => void;
   onSubmitAnswer: (value: string) => void;
+  onRetry: () => void;
   onReload: () => void;
   onBack: () => void;
 }): React.JSX.Element {
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [answer, setAnswer] = useState('');
 
-  const canAssign = session.allowed_actions.includes('ASSIGN_SLOT');
-  const canDelete = session.allowed_actions.includes('DELETE_ASSIGNMENT');
-  const canContinue = session.allowed_actions.includes('SUBMIT_COMMITMENT');
-  const canAcknowledge = session.allowed_actions.includes('ACKNOWLEDGE_INSUFFICIENT_INFORMATION');
-  const canSubmitAnswer = session.allowed_actions.includes('SUBMIT_FINAL_ANSWER');
+  // Controls are gated exclusively by server `allowed_actions` (AC-050).
+  // A pending/retrying action blocks new submits so the same client_action_id is reused.
+  const actionsLocked = submitting || pending;
+  const canAssign = session.allowed_actions.includes('ASSIGN_SLOT') && !actionsLocked;
+  const canDelete = session.allowed_actions.includes('DELETE_ASSIGNMENT') && !actionsLocked;
+  const canContinue = session.allowed_actions.includes('SUBMIT_COMMITMENT') && !actionsLocked;
+  const canAcknowledge =
+    session.allowed_actions.includes('ACKNOWLEDGE_INSUFFICIENT_INFORMATION') && !actionsLocked;
+  const canSubmitAnswer = session.allowed_actions.includes('SUBMIT_FINAL_ANSWER') && !actionsLocked;
   const isCompleted = session.status === 'COMPLETED';
+  const showRetry = ux === 'retry' || ux === 'offline';
 
   // Tokens already placed anywhere in the workspace should not be re-offered.
   const placed = new Set(
@@ -59,7 +74,7 @@ export function ProblemView({
 
   return (
     <div className="card" data-testid="problem-screen">
-      <button type="button" data-testid="back" onClick={onBack}>
+      <button type="button" data-testid="back" onClick={onBack} disabled={submitting}>
         ← Dashboard
       </button>
       <p>
@@ -72,6 +87,12 @@ export function ProblemView({
       {session.accepted_commitments.length > 0 && (
         <p data-testid="accepted-commitments">
           Commitments: {session.accepted_commitments.join(', ')}
+        </p>
+      )}
+
+      {submitting && (
+        <p className="status-line" data-testid="submitting" role="status">
+          Sending action…
         </p>
       )}
 
@@ -154,11 +175,12 @@ export function ProblemView({
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             inputMode="numeric"
+            disabled={actionsLocked}
           />
           <button
             type="button"
             data-testid="submit-answer"
-            disabled={answer.trim() === ''}
+            disabled={answer.trim() === '' || actionsLocked}
             onClick={() => {
               onSubmitAnswer(answer);
               setAnswer('');
@@ -170,7 +192,11 @@ export function ProblemView({
       )}
 
       {banner && (
-        <p className="message" data-testid="message">
+        <p
+          className={ux === 'conflict' ? 'message message--conflict' : 'message'}
+          data-testid="message"
+          role="status"
+        >
           {banner}
         </p>
       )}
@@ -179,7 +205,20 @@ export function ProblemView({
           {session.guidance_code}
         </p>
       )}
-      <button type="button" data-testid="reload" onClick={onReload}>
+
+      {showRetry && (
+        <button
+          type="button"
+          data-testid="retry-action"
+          className="retry"
+          disabled={submitting}
+          onClick={onRetry}
+        >
+          Retry same action
+        </button>
+      )}
+
+      <button type="button" data-testid="reload" onClick={onReload} disabled={submitting}>
         Reload from server
       </button>
     </div>

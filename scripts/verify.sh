@@ -62,7 +62,14 @@ npm run test:e2e
 log "Production build"
 npm run build
 
-# 7. Container build + smoke + restart persistence.
+# 7. Capacitor packaging smoke (AC-046 / AC-047).
+log "Capacitor Android smoke (AC-046)"
+bash scripts/capacitor-android-smoke.sh
+
+log "Capacitor iOS smoke (AC-047; skips when Xcode unavailable)"
+bash scripts/capacitor-ios-smoke.sh
+
+# 8. Container build + smoke + restart persistence.
 log "Docker image build (no cache)"
 docker compose build --no-cache app
 

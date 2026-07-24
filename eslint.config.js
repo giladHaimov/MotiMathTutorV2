@@ -13,6 +13,8 @@ export default tseslint.config(
       '**/playwright-report/**',
       '**/test-results/**',
       'apps/web/dist/**',
+      'apps/web/android/**',
+      'apps/web/ios/**',
       'db/migrations/**',
       'design-docs/**',
     ],

@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { bearer } from 'better-auth/plugins';
 import { db } from '../db/index.js';
 import type { AppConfig } from '../config/index.js';
 import * as authSchema from '../db/schema/auth-schema.js';
@@ -15,6 +16,10 @@ import * as authSchema from '../db/schema/auth-schema.js';
  * sign-up/sign-in). Those limits are never weakened. X-Forwarded-For is honored
  * only when `TRUSTED_PROXIES` is explicitly configured; otherwise it is ignored
  * so direct clients cannot spoof their IP for per-IP rate limits.
+ *
+ * The bearer plugin enables the approved Capacitor session-token path
+ * (ARCHITECTURE §2 / §17): clients may authenticate with
+ * `Authorization: Bearer <session token>` in addition to cookies.
  */
 export function createAuth(config: AppConfig) {
   const trustForwardedIp = config.TRUSTED_PROXIES.length > 0;
@@ -36,6 +41,7 @@ export function createAuth(config: AppConfig) {
     session: { modelName: 'auth_sessions' },
     account: { modelName: 'auth_accounts' },
     verification: { modelName: 'auth_verifications' },
+    plugins: [bearer()],
     advanced: {
       ipAddress: trustForwardedIp
         ? {
