@@ -1,0 +1,103 @@
+{
+  "program": {
+    "slug": "core-reasoning",
+    "name": "Core Reasoning MVP",
+    "version": 1,
+    "status": "ACTIVE"
+  },
+  "problem": {
+    "problem_key": "EX-02",
+    "version": 1,
+    "domain": "RATIO",
+    "title": "Ratio: avoid premature quantification",
+    "difficulty_level": 2,
+    "full_text": "Red and blue marbles are in the ratio 2:3. There are 15 blue marbles. How many red marbles are there?",
+    "status": "ACTIVE",
+    "definition": {
+      "workspace_slots": ["RATIO", "PART_IN_NUMBER", "UNKNOWN"],
+      "assignable": [
+        {
+          "token_id": "ex02-c0-ratio",
+          "slot": "RATIO",
+          "requires_revealed_chunk_index": 0,
+          "label": "2:3"
+        },
+        {
+          "token_id": "ex02-c1-blue",
+          "slot": "PART_IN_NUMBER",
+          "requires_revealed_chunk_index": 1,
+          "label": "15 blue marbles"
+        },
+        {
+          "token_id": "ex02-c2-unknown",
+          "slot": "UNKNOWN",
+          "requires_revealed_chunk_index": 2,
+          "label": "red marbles"
+        }
+      ],
+      "invalid_assignments": [],
+      "gates": [
+        { "reveals_chunk_index": 1, "requires_commitment": "RATIO_IDENTIFIED" },
+        { "reveals_chunk_index": 2, "requires_commitment": "SCALE_IDENTIFIED" }
+      ],
+      "completion_rule": { "requires_slots_filled": ["RATIO", "PART_IN_NUMBER", "UNKNOWN"] },
+      "expected_final_result": { "value": "10", "unit": "red marbles" }
+    },
+    "chunks": [
+      {
+        "order_index": 0,
+        "chunk_type": "CONTEXT",
+        "content": "Red and blue marbles are in the ratio 2:3.",
+        "tokens": [{ "token_id": "ex02-c0-ratio", "text": "2:3", "role": "RATIO" }],
+        "semantic_definition": { "establishes": "RATIO", "scale_known": false }
+      },
+      {
+        "order_index": 1,
+        "chunk_type": "FACT",
+        "content": "There are 15 blue marbles.",
+        "tokens": [{ "token_id": "ex02-c1-blue", "text": "15 blue marbles", "role": "QUANTITY" }],
+        "semantic_definition": { "establishes": "SCALE", "units": 3 }
+      },
+      {
+        "order_index": 2,
+        "chunk_type": "QUESTION",
+        "content": "How many red marbles are there?",
+        "tokens": [{ "token_id": "ex02-c2-unknown", "text": "red marbles", "role": "UNKNOWN" }],
+        "semantic_definition": { "unknown": "RED_COUNT" }
+      }
+    ]
+  },
+  "misconception_classes": [
+    {
+      "code": "PREMATURE_QUANTIFICATION",
+      "name": "Premature quantification",
+      "description": "A numeric or scale commitment was attempted before the required facts were revealed."
+    },
+    {
+      "code": "WHOLE_PART_CONFUSION",
+      "name": "Whole/part confusion",
+      "description": "A part value was placed where the whole belongs, or vice versa."
+    },
+    {
+      "code": "UNKNOWN_MISIDENTIFICATION",
+      "name": "Unknown misidentification",
+      "description": "The wrong quantity was identified as the unknown."
+    },
+    {
+      "code": "RELATION_WITHOUT_OPERANDS",
+      "name": "Relation without operands",
+      "description": "A relational operator was committed before its operands existed."
+    },
+    {
+      "code": "CONFLICTING_SLOT_ASSIGNMENT",
+      "name": "Conflicting slot assignment",
+      "description": "An assignment conflicts with an existing one and requires explicit deletion."
+    },
+    {
+      "code": "COMPLEMENT_CONFUSION",
+      "name": "Complement confusion",
+      "description": "A part was confused with its complement."
+    }
+  ],
+  "rollback_rules": []
+}

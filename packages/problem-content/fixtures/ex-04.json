@@ -1,0 +1,123 @@
+{
+  "program": {
+    "slug": "core-reasoning",
+    "name": "Core Reasoning MVP",
+    "version": 1,
+    "status": "ACTIVE"
+  },
+  "problem": {
+    "problem_key": "EX-04",
+    "version": 1,
+    "domain": "PERCENT",
+    "title": "Conflict deletion and rollback (on EX-01)",
+    "difficulty_level": 2,
+    "full_text": "A class has 40 students. Thirty percent wear glasses. How many students wear glasses?",
+    "status": "ACTIVE",
+    "definition": {
+      "workspace_slots": ["WHOLE", "PART_IN_PERCENTAGE", "PART_IN_NUMBER", "UNKNOWN"],
+      "assignable": [
+        {
+          "token_id": "ex04-c0-whole",
+          "slot": "WHOLE",
+          "requires_revealed_chunk_index": 0,
+          "label": "40 students"
+        },
+        {
+          "token_id": "ex04-c1-percent",
+          "slot": "PART_IN_PERCENTAGE",
+          "requires_revealed_chunk_index": 1,
+          "label": "30%"
+        },
+        {
+          "token_id": "ex04-c2-unknown",
+          "slot": "UNKNOWN",
+          "requires_revealed_chunk_index": 2,
+          "label": "students who wear glasses"
+        }
+      ],
+      "invalid_assignments": [
+        {
+          "token_id": "ex04-c0-whole",
+          "slot": "PART_IN_NUMBER",
+          "misconception_code": "WHOLE_PART_CONFUSION"
+        },
+        {
+          "token_id": "ex04-c1-percent",
+          "slot": "WHOLE",
+          "misconception_code": "CONFLICTING_SLOT_ASSIGNMENT"
+        }
+      ],
+      "gates": [
+        { "reveals_chunk_index": 1, "requires_commitment": "WHOLE_IDENTIFIED" },
+        { "reveals_chunk_index": 2, "requires_commitment": "PART_PERCENTAGE_IDENTIFIED" }
+      ],
+      "completion_rule": { "requires_slots_filled": ["WHOLE", "PART_IN_PERCENTAGE", "UNKNOWN"] },
+      "expected_final_result": { "value": "12", "unit": "students" }
+    },
+    "chunks": [
+      {
+        "order_index": 0,
+        "chunk_type": "CONTEXT",
+        "content": "A class has 40 students.",
+        "tokens": [{ "token_id": "ex04-c0-whole", "text": "40 students", "role": "QUANTITY" }],
+        "semantic_definition": { "establishes": "WHOLE" }
+      },
+      {
+        "order_index": 1,
+        "chunk_type": "FACT",
+        "content": "Thirty percent wear glasses.",
+        "tokens": [{ "token_id": "ex04-c1-percent", "text": "30%", "role": "PERCENTAGE" }],
+        "semantic_definition": { "establishes": "PART_IN_PERCENTAGE", "subset": "wear glasses" }
+      },
+      {
+        "order_index": 2,
+        "chunk_type": "QUESTION",
+        "content": "How many students wear glasses?",
+        "tokens": [
+          { "token_id": "ex04-c2-unknown", "text": "students who wear glasses", "role": "UNKNOWN" }
+        ],
+        "semantic_definition": { "unknown": "PART_IN_NUMBER" }
+      }
+    ]
+  },
+  "misconception_classes": [
+    {
+      "code": "PREMATURE_QUANTIFICATION",
+      "name": "Premature quantification",
+      "description": "A numeric or scale commitment was attempted before the required facts were revealed."
+    },
+    {
+      "code": "WHOLE_PART_CONFUSION",
+      "name": "Whole/part confusion",
+      "description": "A part value was placed where the whole belongs, or vice versa."
+    },
+    {
+      "code": "UNKNOWN_MISIDENTIFICATION",
+      "name": "Unknown misidentification",
+      "description": "The wrong quantity was identified as the unknown."
+    },
+    {
+      "code": "RELATION_WITHOUT_OPERANDS",
+      "name": "Relation without operands",
+      "description": "A relational operator was committed before its operands existed."
+    },
+    {
+      "code": "CONFLICTING_SLOT_ASSIGNMENT",
+      "name": "Conflicting slot assignment",
+      "description": "An assignment conflicts with an existing one and requires explicit deletion."
+    },
+    {
+      "code": "COMPLEMENT_CONFUSION",
+      "name": "Complement confusion",
+      "description": "A part was confused with its complement."
+    }
+  ],
+  "rollback_rules": [
+    {
+      "misconception_code": "CONFLICTING_SLOT_ASSIGNMENT",
+      "repeat_from": 2,
+      "rollback_depth": 1,
+      "guidance_code": "GUIDE_DELETE_CONFLICT"
+    }
+  ]
+}

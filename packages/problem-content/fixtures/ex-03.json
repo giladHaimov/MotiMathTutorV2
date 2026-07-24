@@ -1,0 +1,105 @@
+{
+  "program": {
+    "slug": "core-reasoning",
+    "name": "Core Reasoning MVP",
+    "version": 1,
+    "status": "ACTIVE"
+  },
+  "problem": {
+    "problem_key": "EX-03",
+    "version": 1,
+    "domain": "FRACTION",
+    "title": "Fraction: distinguish read from remaining",
+    "difficulty_level": 3,
+    "full_text": "Dana read three fifths of a 50-page booklet. How many pages remain unread?",
+    "status": "ACTIVE",
+    "definition": {
+      "workspace_slots": ["FRACTION", "WHOLE", "UNKNOWN"],
+      "assignable": [
+        {
+          "token_id": "ex03-c0-fraction",
+          "slot": "FRACTION",
+          "requires_revealed_chunk_index": 0,
+          "label": "three fifths (read)"
+        },
+        {
+          "token_id": "ex03-c1-whole",
+          "slot": "WHOLE",
+          "requires_revealed_chunk_index": 1,
+          "label": "50 pages"
+        },
+        {
+          "token_id": "ex03-c2-unknown",
+          "slot": "UNKNOWN",
+          "requires_revealed_chunk_index": 2,
+          "label": "pages that remain unread"
+        }
+      ],
+      "invalid_assignments": [],
+      "gates": [
+        { "reveals_chunk_index": 1, "requires_commitment": "READ_FRACTION_IDENTIFIED" },
+        { "reveals_chunk_index": 2, "requires_commitment": "WHOLE_IDENTIFIED" }
+      ],
+      "completion_rule": { "requires_slots_filled": ["FRACTION", "WHOLE", "UNKNOWN"] },
+      "expected_final_result": { "value": "20", "unit": "pages" }
+    },
+    "chunks": [
+      {
+        "order_index": 0,
+        "chunk_type": "CONTEXT",
+        "content": "Dana read three fifths",
+        "tokens": [{ "token_id": "ex03-c0-fraction", "text": "three fifths", "role": "FRACTION" }],
+        "semantic_definition": { "establishes": "READ_FRACTION", "whole_known": false }
+      },
+      {
+        "order_index": 1,
+        "chunk_type": "FACT",
+        "content": "of a 50-page booklet.",
+        "tokens": [{ "token_id": "ex03-c1-whole", "text": "50 pages", "role": "QUANTITY" }],
+        "semantic_definition": { "establishes": "WHOLE" }
+      },
+      {
+        "order_index": 2,
+        "chunk_type": "QUESTION",
+        "content": "How many pages remain unread?",
+        "tokens": [
+          { "token_id": "ex03-c2-unknown", "text": "pages that remain unread", "role": "UNKNOWN" }
+        ],
+        "semantic_definition": { "unknown": "COMPLEMENT_PART" }
+      }
+    ]
+  },
+  "misconception_classes": [
+    {
+      "code": "PREMATURE_QUANTIFICATION",
+      "name": "Premature quantification",
+      "description": "A numeric or scale commitment was attempted before the required facts were revealed."
+    },
+    {
+      "code": "WHOLE_PART_CONFUSION",
+      "name": "Whole/part confusion",
+      "description": "A part value was placed where the whole belongs, or vice versa."
+    },
+    {
+      "code": "UNKNOWN_MISIDENTIFICATION",
+      "name": "Unknown misidentification",
+      "description": "The wrong quantity was identified as the unknown."
+    },
+    {
+      "code": "RELATION_WITHOUT_OPERANDS",
+      "name": "Relation without operands",
+      "description": "A relational operator was committed before its operands existed."
+    },
+    {
+      "code": "CONFLICTING_SLOT_ASSIGNMENT",
+      "name": "Conflicting slot assignment",
+      "description": "An assignment conflicts with an existing one and requires explicit deletion."
+    },
+    {
+      "code": "COMPLEMENT_CONFUSION",
+      "name": "Complement confusion",
+      "description": "A part was confused with its complement."
+    }
+  ],
+  "rollback_rules": []
+}
