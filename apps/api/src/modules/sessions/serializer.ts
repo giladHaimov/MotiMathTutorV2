@@ -25,6 +25,8 @@ export interface SerializeInput {
   acceptedCommitments: string[];
   chunks: ChunkRow[];
   message: string | null;
+  /** Fixture guidance code when a rollback rule fires; otherwise null. */
+  guidanceCode?: string | null;
   /** Projected problem definition — drives allowed_actions / required_next_action. */
   problemDefinition: EngineProblemDefinition;
 }
@@ -84,6 +86,7 @@ export function buildPublicSession(input: SerializeInput): PublicSession {
     required_next_action: requiredNext,
     allowed_actions: allowedActions,
     message: input.message,
+    guidance_code: input.guidanceCode ?? null,
     engine_version: input.engineVersion,
     content_version: input.contentVersion,
   };

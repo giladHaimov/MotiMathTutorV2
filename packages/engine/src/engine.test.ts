@@ -46,6 +46,7 @@ const def: EngineProblemDefinition = {
   ],
   completion_rule: { requires_slots_filled: ['WHOLE', 'PART_IN_PERCENTAGE', 'UNKNOWN'] },
   expected_final_result: { value: '12', unit: 'students' },
+  rollback_rules: [],
 };
 
 const ratioDef: EngineProblemDefinition = {
@@ -93,6 +94,7 @@ const ratioDef: EngineProblemDefinition = {
   ],
   completion_rule: { requires_slots_filled: ['RATIO', 'PART_IN_NUMBER', 'UNKNOWN'] },
   expected_final_result: { value: '10', unit: 'red marbles' },
+  rollback_rules: [],
 };
 
 const fractionDef: EngineProblemDefinition = {
@@ -146,6 +148,7 @@ const fractionDef: EngineProblemDefinition = {
   ],
   completion_rule: { requires_slots_filled: ['FRACTION', 'WHOLE', 'UNKNOWN'] },
   expected_final_result: { value: '20', unit: 'pages' },
+  rollback_rules: [],
 };
 
 function freshState(definition: EngineProblemDefinition = def): EngineSessionState {
@@ -612,6 +615,165 @@ describe('Slice 03 complement confusion + EX-03 (AC-038)', () => {
       problemDefinition: fractionDef,
       sessionState: state,
       action: { action_type: 'SUBMIT_FINAL_ANSWER', payload: { value: '20' } },
+    });
+    expect(done.outcome).toBe('ACCEPTED');
+    expect(done.nextState.status).toBe('COMPLETED');
+  });
+});
+
+const ex04Def: EngineProblemDefinition = {
+  problem_key: 'EX-04',
+  workspace_slots: ['WHOLE', 'PART_IN_PERCENTAGE', 'PART_IN_NUMBER', 'UNKNOWN'],
+  assignable: [
+    {
+      token_id: 'ex04-c0-whole',
+      slot: 'WHOLE',
+      requires_revealed_chunk_index: 0,
+      label: '40 students',
+    },
+    {
+      token_id: 'ex04-c1-percent',
+      slot: 'PART_IN_PERCENTAGE',
+      requires_revealed_chunk_index: 1,
+      label: '30%',
+    },
+    {
+      token_id: 'ex04-c2-unknown',
+      slot: 'UNKNOWN',
+      requires_revealed_chunk_index: 2,
+      label: 'students who wear glasses',
+    },
+  ],
+  invalid_assignments: [
+    {
+      token_id: 'ex04-c0-whole',
+      slot: 'PART_IN_NUMBER',
+      misconception_code: 'WHOLE_PART_CONFUSION',
+    },
+    {
+      token_id: 'ex04-c1-percent',
+      slot: 'WHOLE',
+      misconception_code: 'CONFLICTING_SLOT_ASSIGNMENT',
+    },
+  ],
+  fact_establishments: [],
+  sufficiency_dependencies: [],
+  chunk_count: 3,
+  gates: [
+    { reveals_chunk_index: 1, requires_commitment: 'WHOLE_IDENTIFIED' },
+    { reveals_chunk_index: 2, requires_commitment: 'PART_PERCENTAGE_IDENTIFIED' },
+  ],
+  completion_rule: { requires_slots_filled: ['WHOLE', 'PART_IN_PERCENTAGE', 'UNKNOWN'] },
+  expected_final_result: { value: '12', unit: 'students' },
+  rollback_rules: [
+    {
+      misconception_code: 'CONFLICTING_SLOT_ASSIGNMENT',
+      repeat_from: 2,
+      rollback_depth: 1,
+      guidance_code: 'GUIDE_DELETE_CONFLICT',
+    },
+  ],
+};
+
+describe('engine conflict + deterministic rollback (Slice 04 / EX-04)', () => {
+  it('classifies occupied-slot conflict as CONFLICTING_SLOT_ASSIGNMENT (AC-026/030)', () => {
+    const filled = assign(ex04Def, freshState(ex04Def), 'WHOLE', 'ex04-c0-whole');
+    const blocked = applyAction({
+      problemDefinition: ex04Def,
+      sessionState: filled,
+      action: {
+        action_type: 'ASSIGN_SLOT',
+        payload: { slot: 'WHOLE', token_id: 'ex04-c0-whole' },
+      },
+    });
+    expect(blocked.outcome).toBe('REJECTED');
+    expect(blocked.misconception_code).toBe('CONFLICTING_SLOT_ASSIGNMENT');
+    expect(blocked.rollback).toBeNull();
+    expect(blocked.nextState.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe(
+      'ex04-c0-whole',
+    );
+  });
+
+  it('does not roll back on the first CONFLICTING_SLOT_ASSIGNMENT (AC-031)', () => {
+    let state = assign(ex04Def, freshState(ex04Def), 'WHOLE', 'ex04-c0-whole');
+    state = commit(ex04Def, state);
+    const first = applyAction({
+      problemDefinition: ex04Def,
+      sessionState: state,
+      action: {
+        action_type: 'ASSIGN_SLOT',
+        payload: { slot: 'WHOLE', token_id: 'ex04-c1-percent' },
+      },
+      priorMisconceptionCounts: {},
+    });
+    expect(first.outcome).toBe('REJECTED');
+    expect(first.misconception_code).toBe('CONFLICTING_SLOT_ASSIGNMENT');
+    expect(first.rollback).toBeNull();
+    expect(first.nextState.current_chunk_index).toBe(1);
+  });
+
+  it('triggers fixture rollback on the second equivalent error (AC-031/039)', () => {
+    let state = assign(ex04Def, freshState(ex04Def), 'WHOLE', 'ex04-c0-whole');
+    state = commit(ex04Def, state);
+    expect(state.current_chunk_index).toBe(1);
+
+    const second = applyAction({
+      problemDefinition: ex04Def,
+      sessionState: state,
+      action: {
+        action_type: 'ASSIGN_SLOT',
+        payload: { slot: 'WHOLE', token_id: 'ex04-c1-percent' },
+      },
+      priorMisconceptionCounts: { CONFLICTING_SLOT_ASSIGNMENT: 1 },
+    });
+    expect(second.outcome).toBe('REJECTED');
+    expect(second.misconception_code).toBe('CONFLICTING_SLOT_ASSIGNMENT');
+    expect(second.rollback).toEqual({
+      misconception_code: 'CONFLICTING_SLOT_ASSIGNMENT',
+      from_chunk_index: 1,
+      to_chunk_index: 0,
+      rollback_depth: 1,
+      repeat_count: 2,
+      guidance_code: 'GUIDE_DELETE_CONFLICT',
+    });
+    expect(second.guidance_code).toBe('GUIDE_DELETE_CONFLICT');
+    expect(second.message).toMatch(/delete|rebuild/i);
+    expect(second.nextState.current_chunk_index).toBe(0);
+    expect(second.nextState.accepted_commitments).toEqual([]);
+    expect(second.events.some((e) => e.event_type === 'ROLLBACK_APPLIED')).toBe(true);
+  });
+
+  it('rollback target remains valid and recoverable to completion', () => {
+    let state = assign(ex04Def, freshState(ex04Def), 'WHOLE', 'ex04-c0-whole');
+    state = commit(ex04Def, state);
+    state = applyAction({
+      problemDefinition: ex04Def,
+      sessionState: state,
+      action: { action_type: 'DELETE_ASSIGNMENT', payload: { slot: 'WHOLE' } },
+    }).nextState;
+
+    const rolled = applyAction({
+      problemDefinition: ex04Def,
+      sessionState: state,
+      action: {
+        action_type: 'ASSIGN_SLOT',
+        payload: { slot: 'WHOLE', token_id: 'ex04-c1-percent' },
+      },
+      priorMisconceptionCounts: { CONFLICTING_SLOT_ASSIGNMENT: 1 },
+    });
+    expect(rolled.rollback).not.toBeNull();
+    state = rolled.nextState;
+    expect(state.current_chunk_index).toBe(0);
+
+    state = assign(ex04Def, state, 'WHOLE', 'ex04-c0-whole');
+    state = commit(ex04Def, state);
+    state = assign(ex04Def, state, 'PART_IN_PERCENTAGE', 'ex04-c1-percent');
+    state = commit(ex04Def, state);
+    state = assign(ex04Def, state, 'UNKNOWN', 'ex04-c2-unknown');
+    const done = applyAction({
+      problemDefinition: ex04Def,
+      sessionState: state,
+      action: { action_type: 'SUBMIT_FINAL_ANSWER', payload: { value: '12' } },
     });
     expect(done.outcome).toBe('ACCEPTED');
     expect(done.nextState.status).toBe('COMPLETED');

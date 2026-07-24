@@ -53,5 +53,8 @@ export function toEngineProblemDefinition(
       value: parsed.expected_final_result.value,
       unit: parsed.expected_final_result.unit,
     },
+    // Rollback rules live in the `rollback_rules` table; the session service
+    // merges the pinned problem's rules before calling the engine.
+    rollback_rules: [],
   };
 }

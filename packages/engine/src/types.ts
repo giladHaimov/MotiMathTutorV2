@@ -36,6 +36,25 @@ export interface EngineInvalidAssignment {
   misconception_code: string;
 }
 
+/** Fixture-/DB-defined deterministic rollback rule (Slice 04 / EX-04). */
+export interface EngineRollbackRule {
+  misconception_code: string;
+  /** Fire when the session's equivalent-error count reaches this value (inclusive). */
+  repeat_from: number;
+  rollback_depth: number;
+  guidance_code: string;
+}
+
+/** Record describing a rollback that must be persisted atomically with the attempt. */
+export interface EngineRollbackRecord {
+  misconception_code: string;
+  from_chunk_index: number;
+  to_chunk_index: number;
+  rollback_depth: number;
+  repeat_count: number;
+  guidance_code: string;
+}
+
 /** The slice-relevant projection of a problem's immutable `definition` jsonb. */
 export interface EngineProblemDefinition {
   problem_key: string;
@@ -64,6 +83,8 @@ export interface EngineProblemDefinition {
   completion_rule: { requires_slots_filled: Slot[] };
   /** Server-only expected numeric/string result (never serialized publicly). */
   expected_final_result: { value: string; unit: string };
+  /** Deterministic rollback rules for this problem version (may be empty). */
+  rollback_rules: EngineRollbackRule[];
 }
 
 export interface PendingAcknowledgment {
@@ -103,11 +124,16 @@ export interface EngineResult {
   outcome: ActionOutcome;
   /**
    * Next durable state. Identical to input on a pure reject; may change
-   * guidance/acknowledgment fields without advancing reveal (ARCHITECTURE §8).
+   * guidance/acknowledgment/rollback fields without advancing reveal forward
+   * (ARCHITECTURE §8).
    */
   nextState: EngineSessionState;
   events: EngineEvent[];
   misconception_code: string | null;
   /** Safe message surfaced to the client; never hidden content. */
   message: string | null;
+  /** Guidance code when a rollback rule fires; otherwise null. */
+  guidance_code: string | null;
+  /** Present when a deterministic rollback must be persisted with this attempt. */
+  rollback: EngineRollbackRecord | null;
 }

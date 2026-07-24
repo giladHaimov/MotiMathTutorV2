@@ -93,6 +93,8 @@ export const publicSessionSchema = z
     required_next_action: z.object({ action_type: actionTypeSchema.nullable() }),
     allowed_actions: z.array(actionTypeSchema),
     message: z.string().nullable(),
+    /** Fixture guidance code when a rollback rule fires; otherwise null. */
+    guidance_code: z.string().nullable(),
     engine_version: z.string(),
     content_version: z.number().int(),
   })

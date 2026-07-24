@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { ActionRequest, PublicSession } from '@app/contracts';
-import { applyAction, type EngineSessionState } from '@app/engine';
+import { applyAction, type EngineProblemDefinition, type EngineSessionState } from '@app/engine';
 import { toEngineProblemDefinition, type ProblemDefinitionFixture } from '@app/problem-content';
 import type { Db } from '../../db/index.js';
 import {
   learningEvents,
   learningSessions,
   problems,
+  rollbackLogs,
+  rollbackRules,
   stageAttempts,
 } from '../../db/schema/product.js';
 import { ApiError } from '../../http/errors.js';
@@ -56,10 +58,10 @@ export async function startSession(
   const chunkRows = await loadChunkRows(db, problem.id);
   const workspace = initialWorkspace(problem.definition.workspace_slots);
   const sessionId = randomUUID();
-  const problemDefinition = toEngineProblemDefinition(
-    problem.problemKey,
-    problem.definition,
-    chunkRows.length,
+  const rules = await loadRollbackRules(db, problem.id);
+  const problemDefinition = withRollbackRules(
+    toEngineProblemDefinition(problem.problemKey, problem.definition, chunkRows.length),
+    rules,
   );
 
   const publicSession = buildPublicSession({
@@ -74,6 +76,7 @@ export async function startSession(
     acceptedCommitments: [],
     chunks: chunkRows,
     message: null,
+    guidanceCode: null,
     problemDefinition,
   });
 
@@ -121,8 +124,13 @@ export async function getSession(
 
   const definition = await loadDefinition(db, s.problemId);
   const chunkRows = await loadChunkRows(db, s.problemId);
-  const problemDefinition = toEngineProblemDefinition('pinned', definition, chunkRows.length);
+  const rules = await loadRollbackRules(db, s.problemId);
+  const problemDefinition = withRollbackRules(
+    toEngineProblemDefinition('pinned', definition, chunkRows.length),
+    rules,
+  );
   const workspace = normalizeWorkspace(s.workspaceState, definition.workspace_slots);
+  const stored = s.publicState as PublicSession | null;
 
   return buildPublicSession({
     sessionId: s.id,
@@ -135,7 +143,8 @@ export async function getSession(
     workspace,
     acceptedCommitments: s.acceptedCommitments as string[],
     chunks: chunkRows,
-    message: workspace.pending_acknowledgment?.message ?? null,
+    message: workspace.pending_acknowledgment?.message ?? stored?.message ?? null,
+    guidanceCode: stored?.guidance_code ?? null,
     problemDefinition,
   });
 }
@@ -143,7 +152,7 @@ export async function getSession(
 /**
  * Submit one structured action inside the ARCHITECTURE §8 transaction:
  * idempotency → row lock → ownership → version compare → pure engine →
- * atomic persistence of attempt + events + session state.
+ * atomic persistence of attempt + events + session state (+ rollback_logs).
  */
 export async function submitAction(
   db: Db,
@@ -199,7 +208,12 @@ export async function submitAction(
 
     const definition = await loadDefinition(tx, s.problemId);
     const chunkRows = await loadChunkRows(tx, s.problemId);
-    const problemDefinition = toEngineProblemDefinition('pinned', definition, chunkRows.length);
+    const rules = await loadRollbackRules(tx, s.problemId);
+    const problemDefinition = withRollbackRules(
+      toEngineProblemDefinition('pinned', definition, chunkRows.length),
+      rules,
+    );
+    const priorMisconceptionCounts = await countPriorMisconceptions(tx, sessionId);
 
     const seqRows = await tx
       .select({ next: sql<number>`coalesce(max(${stageAttempts.sequenceNo}), 0) + 1` })
@@ -229,6 +243,7 @@ export async function submitAction(
         message:
           currentWorkspace.pending_acknowledgment?.message ??
           'The session changed. Reloaded current state.',
+        guidanceCode: null,
       });
       await tx.insert(stageAttempts).values({
         sessionId,
@@ -265,6 +280,7 @@ export async function submitAction(
       problemDefinition,
       sessionState: engineState,
       action: { action_type: req.action_type, payload: req.payload },
+      priorMisconceptionCounts,
     });
 
     const attemptId = randomUUID();
@@ -281,6 +297,7 @@ export async function submitAction(
         workspace: result.nextState.workspace,
         acceptedCommitments: result.nextState.accepted_commitments,
         message: result.message,
+        guidanceCode: result.guidance_code,
       });
 
       // (10) Advance state + version atomically with attempt + events.
@@ -322,6 +339,7 @@ export async function submitAction(
         engineVersion: s.engineVersion,
         contentVersion: s.contentVersion,
         events: result.events,
+        rollbackDepth: null,
       });
 
       // Test-only fault injection point: throwing here must roll back the whole
@@ -331,47 +349,49 @@ export async function submitAction(
       return { kind: 'APPLIED', session: publicSession };
     }
 
-    // REJECTED semantic action — recorded. Guidance/acknowledgment may still
-    // update durable state without advancing reveal (ARCHITECTURE §8).
-    const guidanceChanged =
-      JSON.stringify(result.nextState.workspace.pending_acknowledgment) !==
-      JSON.stringify(engineState.workspace.pending_acknowledgment);
+    // REJECTED semantic action — recorded. Guidance/acknowledgment/rollback may
+    // still update durable state without advancing reveal forward (ARCHITECTURE §8).
+    const stateChanged =
+      result.nextState.current_chunk_index !== engineState.current_chunk_index ||
+      JSON.stringify(result.nextState.accepted_commitments) !==
+        JSON.stringify(engineState.accepted_commitments) ||
+      JSON.stringify(result.nextState.workspace) !== JSON.stringify(engineState.workspace);
 
     let stateVersion = s.stateVersion;
-    let workspaceToExpose = currentWorkspace;
-    if (guidanceChanged) {
+    if (stateChanged) {
       stateVersion = s.stateVersion + 1;
-      workspaceToExpose = result.nextState.workspace;
-      await tx
-        .update(learningSessions)
-        .set({
-          stateVersion,
-          workspaceState: result.nextState.workspace,
-          updatedAt: new Date(),
-        })
-        .where(eq(learningSessions.id, sessionId));
     }
 
     const publicSession = buildPublicSession({
       ...baseSerialize,
       stateVersion,
       status: 'ACTIVE',
-      currentChunkIndex: s.currentChunkIndex,
-      workspace: workspaceToExpose,
-      acceptedCommitments: s.acceptedCommitments as string[],
+      currentChunkIndex: result.nextState.current_chunk_index,
+      workspace: result.nextState.workspace,
+      acceptedCommitments: result.nextState.accepted_commitments,
       message: result.message,
+      guidanceCode: result.guidance_code,
     });
 
-    if (guidanceChanged) {
-      await tx
-        .update(learningSessions)
-        .set({
-          requiredNextAction: publicSession.required_next_action,
-          publicState: publicSession,
-          updatedAt: new Date(),
-        })
-        .where(eq(learningSessions.id, sessionId));
-    }
+    // Always persist publicState on reject so the latest server message /
+    // guidance survives resume (J-06 instruction display). Durable chunk /
+    // workspace / version only bump when stateChanged.
+    await tx
+      .update(learningSessions)
+      .set({
+        ...(stateChanged
+          ? {
+              stateVersion,
+              currentChunkIndex: result.nextState.current_chunk_index,
+              workspaceState: result.nextState.workspace,
+              acceptedCommitments: result.nextState.accepted_commitments,
+            }
+          : {}),
+        requiredNextAction: publicSession.required_next_action,
+        publicState: publicSession,
+        updatedAt: new Date(),
+      })
+      .where(eq(learningSessions.id, sessionId));
 
     await tx.insert(stageAttempts).values({
       id: attemptId,
@@ -379,7 +399,7 @@ export async function submitAction(
       clientActionId: req.client_action_id,
       sequenceNo,
       expectedStateVersion: req.expected_state_version,
-      stateVersionAfter: guidanceChanged ? stateVersion : null,
+      stateVersionAfter: stateChanged ? stateVersion : null,
       actionType: req.action_type,
       payload: req.payload,
       outcome: 'REJECTED',
@@ -387,6 +407,7 @@ export async function submitAction(
       publicResult: publicSession,
       completedAt: new Date(),
     });
+
     await insertEvents(tx, {
       sessionId,
       attemptId,
@@ -395,7 +416,26 @@ export async function submitAction(
       engineVersion: s.engineVersion,
       contentVersion: s.contentVersion,
       events: result.events,
+      rollbackDepth: result.rollback?.rollback_depth ?? null,
     });
+
+    // (12) Insert rollback_logs when applicable — unique on attempt_id (AC-032).
+    if (result.rollback) {
+      await tx.insert(rollbackLogs).values({
+        sessionId,
+        attemptId,
+        misconceptionCode: result.rollback.misconception_code,
+        fromChunkIndex: result.rollback.from_chunk_index,
+        toChunkIndex: result.rollback.to_chunk_index,
+        rollbackDepth: result.rollback.rollback_depth,
+        repeatCount: result.rollback.repeat_count,
+        guidanceCode: result.rollback.guidance_code,
+      });
+    }
+
+    // Fault injection covers rollback-path atomicity too (state + attempt +
+    // events + rollback_logs). No-op in production.
+    await runPostAcceptWriteHook();
 
     return { kind: 'REJECTED', session: publicSession };
   });
@@ -416,6 +456,67 @@ async function loadDefinition(
   return row.definition as ProblemDefinitionFixture;
 }
 
+async function loadRollbackRules(
+  exec: Executor,
+  problemId: string,
+): Promise<EngineProblemDefinition['rollback_rules']> {
+  const rows = await exec
+    .select({
+      misconceptionCode: rollbackRules.misconceptionCode,
+      repeatFrom: rollbackRules.repeatFrom,
+      rollbackDepth: rollbackRules.rollbackDepth,
+      guidanceCode: rollbackRules.guidanceCode,
+    })
+    .from(rollbackRules)
+    .where(eq(rollbackRules.problemId, problemId));
+  return rows.map((r) => ({
+    misconception_code: r.misconceptionCode,
+    repeat_from: r.repeatFrom,
+    rollback_depth: r.rollbackDepth,
+    guidance_code: r.guidanceCode,
+  }));
+}
+
+function withRollbackRules(
+  def: EngineProblemDefinition,
+  rules: EngineProblemDefinition['rollback_rules'],
+): EngineProblemDefinition {
+  return { ...def, rollback_rules: rules };
+}
+
+/**
+ * Count prior completed REJECTED attempts that carried a misconception code.
+ * The current attempt is not included — the engine adds 1 (AC-031).
+ */
+async function countPriorMisconceptions(
+  exec: Executor,
+  sessionId: string,
+): Promise<Record<string, number>> {
+  const rows = await exec
+    .select({
+      misconceptionCode: stageAttempts.misconceptionCode,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(stageAttempts)
+    .where(
+      and(
+        eq(stageAttempts.sessionId, sessionId),
+        eq(stageAttempts.outcome, 'REJECTED'),
+        isNotNull(stageAttempts.completedAt),
+        isNotNull(stageAttempts.misconceptionCode),
+      ),
+    )
+    .groupBy(stageAttempts.misconceptionCode);
+
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.misconceptionCode) {
+      counts[row.misconceptionCode] = Number(row.count);
+    }
+  }
+  return counts;
+}
+
 async function insertEvents(
   tx: Parameters<Parameters<Db['transaction']>[0]>[0],
   args: {
@@ -430,9 +531,11 @@ async function insertEvents(
       misconception_code: string | null;
       payload: Record<string, unknown>;
     }>;
+    rollbackDepth: number | null;
   },
 ): Promise<void> {
   for (const ev of args.events) {
+    const isRollback = ev.event_type === 'ROLLBACK_APPLIED';
     await tx.insert(learningEvents).values({
       sessionId: args.sessionId,
       attemptId: args.attemptId,
@@ -441,6 +544,7 @@ async function insertEvents(
       eventType: ev.event_type,
       payload: ev.payload,
       misconceptionCode: ev.misconception_code,
+      rollbackDepth: isRollback ? args.rollbackDepth : null,
       engineVersion: args.engineVersion,
       contentVersion: args.contentVersion,
     });
