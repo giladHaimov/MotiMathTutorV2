@@ -7,6 +7,7 @@ export function ProblemView({
   onAssign,
   onDelete,
   onContinue,
+  onAcknowledge,
   onSubmitAnswer,
   onReload,
   onBack,
@@ -16,6 +17,7 @@ export function ProblemView({
   onAssign: (slot: Slot, tokenId: string) => void;
   onDelete: (slot: Slot) => void;
   onContinue: () => void;
+  onAcknowledge: () => void;
   onSubmitAnswer: (value: string) => void;
   onReload: () => void;
   onBack: () => void;
@@ -26,6 +28,7 @@ export function ProblemView({
   const canAssign = session.allowed_actions.includes('ASSIGN_SLOT');
   const canDelete = session.allowed_actions.includes('DELETE_ASSIGNMENT');
   const canContinue = session.allowed_actions.includes('SUBMIT_COMMITMENT');
+  const canAcknowledge = session.allowed_actions.includes('ACKNOWLEDGE_INSUFFICIENT_INFORMATION');
   const canSubmitAnswer = session.allowed_actions.includes('SUBMIT_FINAL_ANSWER');
   const isCompleted = session.status === 'COMPLETED';
 
@@ -82,7 +85,7 @@ export function ProblemView({
                 key={token.token_id}
                 className="token"
                 data-testid={`token-${token.token_id}`}
-                disabled={placed.has(token.token_id)}
+                disabled={placed.has(token.token_id) || !canAssign}
                 aria-pressed={selectedToken === token.token_id}
                 onClick={() => setSelectedToken(token.token_id)}
               >
@@ -135,6 +138,11 @@ export function ProblemView({
         <button type="button" data-testid="continue" disabled={!canContinue} onClick={onContinue}>
           Continue
         </button>
+        {canAcknowledge && (
+          <button type="button" data-testid="acknowledge" onClick={onAcknowledge}>
+            Acknowledge insufficient information
+          </button>
+        )}
       </div>
 
       {canSubmitAnswer && (

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { ActionRequest, PublicSession } from '@app/contracts';
-import { applyAction, type EngineSessionState, type WorkspaceState } from '@app/engine';
+import { applyAction, type EngineSessionState } from '@app/engine';
 import { toEngineProblemDefinition, type ProblemDefinitionFixture } from '@app/problem-content';
 import type { Db } from '../../db/index.js';
 import {
@@ -13,7 +13,7 @@ import {
 import { ApiError } from '../../http/errors.js';
 import type { Profile } from '../profile/service.js';
 import { buildPublicSession } from './serializer.js';
-import { initialWorkspace, loadChunkRows, pickNextProblem } from './repo.js';
+import { initialWorkspace, loadChunkRows, normalizeWorkspace, pickNextProblem } from './repo.js';
 import { runPostAcceptWriteHook } from './test-hooks.js';
 
 export type SubmitOutcome =
@@ -122,6 +122,7 @@ export async function getSession(
   const definition = await loadDefinition(db, s.problemId);
   const chunkRows = await loadChunkRows(db, s.problemId);
   const problemDefinition = toEngineProblemDefinition('pinned', definition, chunkRows.length);
+  const workspace = normalizeWorkspace(s.workspaceState, definition.workspace_slots);
 
   return buildPublicSession({
     sessionId: s.id,
@@ -131,10 +132,10 @@ export async function getSession(
     contentVersion: s.contentVersion,
     currentChunkIndex: s.currentChunkIndex,
     workspaceSlots: definition.workspace_slots,
-    workspace: s.workspaceState as WorkspaceState,
+    workspace,
     acceptedCommitments: s.acceptedCommitments as string[],
     chunks: chunkRows,
-    message: null,
+    message: workspace.pending_acknowledgment?.message ?? null,
     problemDefinition,
   });
 }
@@ -216,15 +217,18 @@ export async function submitAction(
     };
 
     // (6) State-version compare — stale version changes nothing (AC-018).
+    const currentWorkspace = normalizeWorkspace(s.workspaceState, definition.workspace_slots);
     if (req.expected_state_version !== s.stateVersion) {
       const current = buildPublicSession({
         ...baseSerialize,
         stateVersion: s.stateVersion,
         status: 'ACTIVE',
         currentChunkIndex: s.currentChunkIndex,
-        workspace: s.workspaceState as WorkspaceState,
+        workspace: currentWorkspace,
         acceptedCommitments: s.acceptedCommitments as string[],
-        message: 'The session changed. Reloaded current state.',
+        message:
+          currentWorkspace.pending_acknowledgment?.message ??
+          'The session changed. Reloaded current state.',
       });
       await tx.insert(stageAttempts).values({
         sessionId,
@@ -254,7 +258,7 @@ export async function submitAction(
     const engineState: EngineSessionState = {
       status: 'ACTIVE',
       current_chunk_index: s.currentChunkIndex,
-      workspace: s.workspaceState as WorkspaceState,
+      workspace: currentWorkspace,
       accepted_commitments: s.acceptedCommitments as string[],
     };
     const result = applyAction({
@@ -327,23 +331,55 @@ export async function submitAction(
       return { kind: 'APPLIED', session: publicSession };
     }
 
-    // REJECTED semantic action — recorded, but no state advance.
+    // REJECTED semantic action — recorded. Guidance/acknowledgment may still
+    // update durable state without advancing reveal (ARCHITECTURE §8).
+    const guidanceChanged =
+      JSON.stringify(result.nextState.workspace.pending_acknowledgment) !==
+      JSON.stringify(engineState.workspace.pending_acknowledgment);
+
+    let stateVersion = s.stateVersion;
+    let workspaceToExpose = currentWorkspace;
+    if (guidanceChanged) {
+      stateVersion = s.stateVersion + 1;
+      workspaceToExpose = result.nextState.workspace;
+      await tx
+        .update(learningSessions)
+        .set({
+          stateVersion,
+          workspaceState: result.nextState.workspace,
+          updatedAt: new Date(),
+        })
+        .where(eq(learningSessions.id, sessionId));
+    }
+
     const publicSession = buildPublicSession({
       ...baseSerialize,
-      stateVersion: s.stateVersion,
+      stateVersion,
       status: 'ACTIVE',
       currentChunkIndex: s.currentChunkIndex,
-      workspace: s.workspaceState as WorkspaceState,
+      workspace: workspaceToExpose,
       acceptedCommitments: s.acceptedCommitments as string[],
       message: result.message,
     });
+
+    if (guidanceChanged) {
+      await tx
+        .update(learningSessions)
+        .set({
+          requiredNextAction: publicSession.required_next_action,
+          publicState: publicSession,
+          updatedAt: new Date(),
+        })
+        .where(eq(learningSessions.id, sessionId));
+    }
+
     await tx.insert(stageAttempts).values({
       id: attemptId,
       sessionId,
       clientActionId: req.client_action_id,
       sequenceNo,
       expectedStateVersion: req.expected_state_version,
-      stateVersionAfter: null,
+      stateVersionAfter: guidanceChanged ? stateVersion : null,
       actionType: req.action_type,
       payload: req.payload,
       outcome: 'REJECTED',

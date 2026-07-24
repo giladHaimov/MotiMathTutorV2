@@ -121,10 +121,16 @@ describe('EX-01 percentage journey (real API + PostgreSQL)', () => {
     });
     expect(rejected.status).toBe(200);
     expect(rejected.body.state_version).toBe(versionBefore);
-    expect(rejected.body.message).toMatch(/cannot be placed/i);
+    expect(rejected.body.message).toMatch(/structurally invalid|cannot be placed/i);
     expect(rejected.body.visible_chunks).toHaveLength(2);
     expect(rejected.raw).not.toContain('How many students');
     expect(rejected.body.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBeNull();
+
+    const attempts = await db
+      .select()
+      .from(stageAttempts)
+      .where(eq(stageAttempts.sessionId, session.session_id));
+    expect(attempts.some((a) => a.misconceptionCode === 'WHOLE_PART_CONFUSION')).toBe(true);
   });
 
   it('occupied-slot conflict requires explicit delete before progress (AC-026)', async () => {

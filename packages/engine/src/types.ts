@@ -14,6 +14,28 @@ export interface EngineGate {
   requires_commitment: string;
 }
 
+/** Data-driven fact established once its chunk index is revealed. */
+export interface EngineFactEstablishment {
+  fact: string;
+  revealed_at_chunk_index: number;
+}
+
+/** Premature-action rule with optional acknowledgment requirement (Slice 03). */
+export interface EngineSufficiencyDependency {
+  action_type: 'SUBMIT_FINAL_ANSWER';
+  requires_facts: string[];
+  misconception_code: string;
+  requires_acknowledgment: boolean;
+  message: string;
+}
+
+/** Invalid token→slot pairing mapped to a misconception class. */
+export interface EngineInvalidAssignment {
+  token_id: string;
+  slot: Slot;
+  misconception_code: string;
+}
+
 /** The slice-relevant projection of a problem's immutable `definition` jsonb. */
 export interface EngineProblemDefinition {
   problem_key: string;
@@ -28,6 +50,12 @@ export interface EngineProblemDefinition {
     /** Human-safe label persisted into the workspace (never hidden content). */
     label: string;
   }>;
+  /** Known-invalid placements → deterministic misconception codes. */
+  invalid_assignments: EngineInvalidAssignment[];
+  /** Facts established by reveal position (data-driven sufficiency). */
+  fact_establishments: EngineFactEstablishment[];
+  /** Actions blocked until named facts are established. */
+  sufficiency_dependencies: EngineSufficiencyDependency[];
   /** Number of chunks in the problem (bounds the reveal index). */
   chunk_count: number;
   /** Commitment gates that unlock the next chunk (data-driven reveal). */
@@ -38,8 +66,15 @@ export interface EngineProblemDefinition {
   expected_final_result: { value: string; unit: string };
 }
 
+export interface PendingAcknowledgment {
+  misconception_code: string;
+  message: string;
+}
+
 export interface WorkspaceState {
   slots: Array<{ slot: Slot; token_id: string | null; label: string | null }>;
+  /** When set, progressing actions are blocked until acknowledgment (PB-010). */
+  pending_acknowledgment: PendingAcknowledgment | null;
 }
 
 export interface EngineSessionState {
@@ -66,7 +101,10 @@ export type ActionOutcome = 'ACCEPTED' | 'REJECTED';
 
 export interface EngineResult {
   outcome: ActionOutcome;
-  /** Next durable state. Identical to input state when the action is rejected. */
+  /**
+   * Next durable state. Identical to input on a pure reject; may change
+   * guidance/acknowledgment fields without advancing reveal (ARCHITECTURE §8).
+   */
   nextState: EngineSessionState;
   events: EngineEvent[];
   misconception_code: string | null;

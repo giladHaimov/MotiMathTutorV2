@@ -88,5 +88,28 @@ export async function loadChunkRows(exec: Executor, problemId: string): Promise<
 
 /** Fresh empty workspace with one entry per slot defined by the problem version. */
 export function initialWorkspace(workspaceSlots: Slot[]): WorkspaceState {
-  return { slots: workspaceSlots.map((slot) => ({ slot, token_id: null, label: null })) };
+  return {
+    slots: workspaceSlots.map((slot) => ({ slot, token_id: null, label: null })),
+    pending_acknowledgment: null,
+  };
+}
+
+/** Normalize durable workspace jsonb (older rows may omit pending_acknowledgment). */
+export function normalizeWorkspace(raw: unknown, workspaceSlots: Slot[]): WorkspaceState {
+  const obj = (raw ?? {}) as {
+    slots?: Array<{ slot: Slot; token_id: string | null; label: string | null }>;
+    pending_acknowledgment?: WorkspaceState['pending_acknowledgment'];
+  };
+  const slots =
+    obj.slots && obj.slots.length > 0
+      ? obj.slots.map((s) => ({
+          slot: s.slot,
+          token_id: s.token_id ?? null,
+          label: s.label ?? null,
+        }))
+      : workspaceSlots.map((slot) => ({ slot, token_id: null, label: null }));
+  return {
+    slots,
+    pending_acknowledgment: obj.pending_acknowledgment ?? null,
+  };
 }

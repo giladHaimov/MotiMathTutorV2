@@ -5,6 +5,8 @@ import type {
   EngineProblemDefinition,
   EngineResult,
   EngineSessionState,
+  EngineSufficiencyDependency,
+  PendingAcknowledgment,
   WorkspaceState,
 } from './types.js';
 
@@ -13,14 +15,11 @@ export * from './types.js';
 /**
  * Pure reasoning engine (ARCHITECTURE §8).
  *
- * Slice 02 supports:
- *  - ASSIGN_SLOT / DELETE_ASSIGNMENT (typed workspace)
- *  - SUBMIT_COMMITMENT (position-derived gate → progressive reveal)
- *  - SUBMIT_FINAL_ANSWER (completion_rule + expected_final_result)
+ * Slice 02: typed workspace + progressive reveal + final answer.
+ * Slice 03: data-driven semantic sufficiency, premature quantification,
+ * ACKNOWLEDGE_INSUFFICIENT_INFORMATION, and invalid-assignment misconceptions.
  *
- * ACKNOWLEDGE_INSUFFICIENT_INFORMATION remains Slice 03. Misconception /
- * rollback depth remains Slice 04. The function is deterministic and performs
- * no I/O.
+ * Deterministic; no I/O.
  */
 export function applyAction(input: {
   problemDefinition: EngineProblemDefinition;
@@ -29,23 +28,18 @@ export function applyAction(input: {
 }): EngineResult {
   const { problemDefinition, sessionState, action } = input;
 
-  const reject = (message: string, misconception: string | null = null): EngineResult => ({
-    outcome: 'REJECTED',
-    nextState: sessionState,
-    events: [
-      {
-        event_type: 'ACTION_REJECTED',
-        chunk_index: sessionState.current_chunk_index,
-        misconception_code: misconception,
-        payload: { action_type: action.action_type },
-      },
-    ],
-    misconception_code: misconception,
-    message,
-  });
-
   if (sessionState.status !== 'ACTIVE') {
-    return reject('This session is no longer active.');
+    return rejectFrom(sessionState, action, 'This session is no longer active.');
+  }
+
+  // Acknowledgment gate: only ack (and delete) may proceed while pending (PB-010).
+  if (
+    sessionState.workspace.pending_acknowledgment &&
+    action.action_type !== 'ACKNOWLEDGE_INSUFFICIENT_INFORMATION' &&
+    action.action_type !== 'DELETE_ASSIGNMENT'
+  ) {
+    const pending = sessionState.workspace.pending_acknowledgment;
+    return rejectFrom(sessionState, action, pending.message, pending.misconception_code);
   }
 
   switch (action.action_type) {
@@ -58,9 +52,9 @@ export function applyAction(input: {
     case 'SUBMIT_FINAL_ANSWER':
       return submitFinalAnswer(problemDefinition, sessionState, action);
     case 'ACKNOWLEDGE_INSUFFICIENT_INFORMATION':
-      return reject('This action is not available yet in this session.');
+      return acknowledgeInsufficient(sessionState, action);
     default:
-      return reject('Unsupported action.');
+      return rejectFrom(sessionState, action, 'Unsupported action.');
   }
 }
 
@@ -70,6 +64,14 @@ export function computeAllowedActions(
   state: EngineSessionState,
 ): ActionType[] {
   if (state.status !== 'ACTIVE') return [];
+
+  if (state.workspace.pending_acknowledgment) {
+    const allowed: ActionType[] = ['ACKNOWLEDGE_INSUFFICIENT_INFORMATION'];
+    if (state.workspace.slots.some((s) => s.token_id !== null)) {
+      allowed.push('DELETE_ASSIGNMENT');
+    }
+    return allowed;
+  }
 
   const allowed: ActionType[] = [];
   if (hasReachableEmptyAssignable(def, state)) {
@@ -88,8 +90,8 @@ export function computeAllowedActions(
 }
 
 /**
- * Single preferred next step for UI guidance. Priority: fill structure → commit
- * → fill remaining → final answer.
+ * Single preferred next step for UI guidance. Priority: acknowledge → fill
+ * structure → commit → final answer.
  */
 export function computeRequiredNextAction(
   def: EngineProblemDefinition,
@@ -97,6 +99,9 @@ export function computeRequiredNextAction(
 ): { action_type: ActionType | null } {
   if (state.status !== 'ACTIVE') {
     return { action_type: null };
+  }
+  if (state.workspace.pending_acknowledgment) {
+    return { action_type: 'ACKNOWLEDGE_INSUFFICIENT_INFORMATION' };
   }
   if (hasReachableEmptyAssignable(def, state)) {
     return { action_type: 'ASSIGN_SLOT' };
@@ -111,7 +116,12 @@ export function computeRequiredNextAction(
 }
 
 function cloneWorkspace(workspace: WorkspaceState): WorkspaceState {
-  return { slots: workspace.slots.map((s) => ({ ...s })) };
+  return {
+    slots: workspace.slots.map((s) => ({ ...s })),
+    pending_acknowledgment: workspace.pending_acknowledgment
+      ? { ...workspace.pending_acknowledgment }
+      : null,
+  };
 }
 
 function assignSlot(
@@ -125,6 +135,16 @@ function assignSlot(
   }
   if (!def.workspace_slots.includes(slot)) {
     return rejectFrom(state, action, 'That slot does not exist for this problem.');
+  }
+
+  const invalid = def.invalid_assignments.find((a) => a.token_id === token_id && a.slot === slot);
+  if (invalid) {
+    return rejectFrom(
+      state,
+      action,
+      'That assignment is structurally invalid.',
+      invalid.misconception_code,
+    );
   }
 
   const permitted = def.assignable.find((a) => a.token_id === token_id && a.slot === slot);
@@ -249,6 +269,11 @@ function submitFinalAnswer(
   state: EngineSessionState,
   action: EngineAction,
 ): EngineResult {
+  const premature = findUnmetSufficiency(def, state, 'SUBMIT_FINAL_ANSWER');
+  if (premature) {
+    return rejectPremature(state, action, premature);
+  }
+
   if (!finalAnswerReady(def, state)) {
     return rejectFrom(
       state,
@@ -299,6 +324,104 @@ function submitFinalAnswer(
   };
 }
 
+function acknowledgeInsufficient(state: EngineSessionState, action: EngineAction): EngineResult {
+  const pending = state.workspace.pending_acknowledgment;
+  if (!pending) {
+    return rejectFrom(state, action, 'No insufficient-information acknowledgment is required.');
+  }
+
+  const workspace = cloneWorkspace(state.workspace);
+  workspace.pending_acknowledgment = null;
+  const nextState: EngineSessionState = { ...state, workspace };
+  return {
+    outcome: 'ACCEPTED',
+    nextState,
+    events: [
+      {
+        event_type: 'INSUFFICIENT_INFORMATION_ACKNOWLEDGED',
+        chunk_index: state.current_chunk_index,
+        misconception_code: pending.misconception_code,
+        payload: {
+          action_type: action.action_type,
+          misconception_code: pending.misconception_code,
+        },
+      },
+    ],
+    misconception_code: null,
+    message: null,
+  };
+}
+
+function findUnmetSufficiency(
+  def: EngineProblemDefinition,
+  state: EngineSessionState,
+  actionType: 'SUBMIT_FINAL_ANSWER',
+): EngineSufficiencyDependency | null {
+  const established = establishedFacts(def, state);
+  for (const dep of def.sufficiency_dependencies) {
+    if (dep.action_type !== actionType) continue;
+    const missing = dep.requires_facts.some((f) => !established.has(f));
+    if (missing) return dep;
+  }
+  return null;
+}
+
+function establishedFacts(def: EngineProblemDefinition, state: EngineSessionState): Set<string> {
+  const facts = new Set<string>();
+  for (const est of def.fact_establishments) {
+    if (est.revealed_at_chunk_index <= state.current_chunk_index) {
+      facts.add(est.fact);
+    }
+  }
+  return facts;
+}
+
+/**
+ * Premature action: classify misconception, optionally set durable acknowledgment
+ * requirement, never advance reveal (PB-009/010, AC-028/029).
+ */
+function rejectPremature(
+  state: EngineSessionState,
+  action: EngineAction,
+  dep: EngineSufficiencyDependency,
+): EngineResult {
+  let nextState = state;
+  if (dep.requires_acknowledgment) {
+    const pending: PendingAcknowledgment = {
+      misconception_code: dep.misconception_code,
+      message: dep.message,
+    };
+    // Idempotent: re-attempting while already pending keeps the same guidance.
+    if (
+      !state.workspace.pending_acknowledgment ||
+      state.workspace.pending_acknowledgment.misconception_code !== pending.misconception_code
+    ) {
+      const workspace = cloneWorkspace(state.workspace);
+      workspace.pending_acknowledgment = pending;
+      nextState = { ...state, workspace };
+    }
+  }
+
+  return {
+    outcome: 'REJECTED',
+    nextState,
+    events: [
+      {
+        event_type: 'PREMATURE_COMMITMENT_BLOCKED',
+        chunk_index: state.current_chunk_index,
+        misconception_code: dep.misconception_code,
+        payload: {
+          action_type: action.action_type,
+          misconception_code: dep.misconception_code,
+          requires_acknowledgment: dep.requires_acknowledgment,
+        },
+      },
+    ],
+    misconception_code: dep.misconception_code,
+    message: dep.message,
+  };
+}
+
 function nextGate(def: EngineProblemDefinition, state: EngineSessionState): EngineGate | undefined {
   return def.gates.find((g) => g.reveals_chunk_index === state.current_chunk_index + 1);
 }
@@ -329,6 +452,7 @@ function commitmentReady(def: EngineProblemDefinition, state: EngineSessionState
 function finalAnswerReady(def: EngineProblemDefinition, state: EngineSessionState): boolean {
   if (state.current_chunk_index !== def.chunk_count - 1) return false;
   if (nextGate(def, state)) return false;
+  if (findUnmetSufficiency(def, state, 'SUBMIT_FINAL_ANSWER')) return false;
   return def.completion_rule.requires_slots_filled.every((slot) => {
     const filled = state.workspace.slots.find((s) => s.slot === slot);
     return filled?.token_id !== null && filled?.token_id !== undefined;
@@ -365,6 +489,7 @@ function rejectFrom(
   state: EngineSessionState,
   action: EngineAction,
   message: string,
+  misconception: string | null = null,
 ): EngineResult {
   return {
     outcome: 'REJECTED',
@@ -373,11 +498,14 @@ function rejectFrom(
       {
         event_type: 'ACTION_REJECTED',
         chunk_index: state.current_chunk_index,
-        misconception_code: null,
-        payload: { action_type: action.action_type },
+        misconception_code: misconception,
+        payload: {
+          action_type: action.action_type,
+          ...(misconception ? { misconception_code: misconception } : {}),
+        },
       },
     ],
-    misconception_code: null,
+    misconception_code: misconception,
     message,
   };
 }

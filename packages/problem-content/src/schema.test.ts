@@ -41,6 +41,8 @@ function validFixture(): ProblemFixture {
           },
         ],
         invalid_assignments: [],
+        fact_establishments: [],
+        sufficiency_dependencies: [],
         gates: [
           { reveals_chunk_index: 1, requires_commitment: 'WHOLE_IDENTIFIED' },
           { reveals_chunk_index: 2, requires_commitment: 'PART_PERCENTAGE_IDENTIFIED' },

@@ -53,11 +53,36 @@ export const invalidAssignmentSchema = z
   })
   .strict();
 
+/**
+ * Data-driven semantic sufficiency (ARCHITECTURE §12 / Slice 03).
+ * A fact becomes established once its `revealed_at_chunk_index` is visible.
+ * Premature actions that require missing facts are classified and may require
+ * explicit acknowledgment before any further progressing action.
+ */
+export const factEstablishmentSchema = z
+  .object({
+    fact: z.string().min(1),
+    revealed_at_chunk_index: z.number().int().min(0),
+  })
+  .strict();
+
+export const sufficiencyDependencySchema = z
+  .object({
+    action_type: z.enum(['SUBMIT_FINAL_ANSWER']),
+    requires_facts: z.array(z.string().min(1)).min(1),
+    misconception_code: z.string().min(1),
+    requires_acknowledgment: z.boolean(),
+    message: z.string().min(1),
+  })
+  .strict();
+
 export const definitionSchema = z
   .object({
     workspace_slots: z.array(slotSchema).min(1),
     assignable: z.array(assignableSchema),
     invalid_assignments: z.array(invalidAssignmentSchema).default([]),
+    fact_establishments: z.array(factEstablishmentSchema).default([]),
+    sufficiency_dependencies: z.array(sufficiencyDependencySchema).default([]),
     gates: z
       .array(
         z
@@ -255,6 +280,35 @@ export const problemFixtureSchema = z
               code: z.ZodIssueCode.custom,
               message: `gate commitment ${gate.requires_commitment} revealing chunk ${gate.reveals_chunk_index} has no assignable at chunk ${prerequisiteIndex}`,
             });
+          }
+        }
+
+        // Fact establishments must reference valid chunk indexes; facts named by
+        // sufficiency dependencies must be defined.
+        const factNames = new Set<string>();
+        for (const est of problem.definition.fact_establishments) {
+          if (est.revealed_at_chunk_index > lastChunkIndex) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `fact ${est.fact} revealed_at_chunk_index ${est.revealed_at_chunk_index} is beyond last chunk index ${lastChunkIndex}`,
+            });
+          }
+          if (factNames.has(est.fact)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `duplicate fact establishment ${est.fact}`,
+            });
+          }
+          factNames.add(est.fact);
+        }
+        for (const dep of problem.definition.sufficiency_dependencies) {
+          for (const fact of dep.requires_facts) {
+            if (!factNames.has(fact)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `sufficiency dependency requires unknown fact ${fact}`,
+              });
+            }
           }
         }
       }),

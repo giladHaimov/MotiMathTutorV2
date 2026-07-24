@@ -26,9 +26,9 @@ export function App(): React.JSX.Element {
   }, [refreshAuth]);
 
   async function openSession(sessionId: string): Promise<void> {
-    setBanner(null);
     const s = await api.getSession(sessionId);
     setSession(s);
+    setBanner(s.message);
   }
 
   // Submit a structured action. Semantic validity is decided only by the server
@@ -89,6 +89,7 @@ export function App(): React.JSX.Element {
           }
           onDelete={(slot: Slot) => void submit('DELETE_ASSIGNMENT', { slot })}
           onContinue={() => void submit('SUBMIT_COMMITMENT', {})}
+          onAcknowledge={() => void submit('ACKNOWLEDGE_INSUFFICIENT_INFORMATION', {})}
           onSubmitAnswer={(value: string) => void submit('SUBMIT_FINAL_ANSWER', { value })}
           onReload={() => void openSession(session.session_id)}
           onBack={() => {
