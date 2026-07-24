@@ -5,8 +5,9 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import { getConfig, sanitizedConfig, type AppConfig } from './config/index.js';
+import { getConfig, sanitizedConfig, trustProxyOption, type AppConfig } from './config/index.js';
 import { REDACT_PATHS } from './logging/index.js';
+import { createAuth } from './auth/auth.js';
 import { registerAuthRoutes } from './auth/plugin.js';
 import { errorHandler, registerRoutes } from './routes/index.js';
 
@@ -29,9 +30,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     },
     // Reuse an incoming X-Request-Id or generate one; used in every error envelope.
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-    trustProxy: true,
+    // Safe default: false. Only the explicit TRUSTED_PROXIES list is trusted —
+    // never blank-trust-all (spoofable X-Forwarded-For).
+    trustProxy: trustProxyOption(config),
     bodyLimit: 256 * 1024,
   });
+
+  app.decorate('auth', createAuth(config));
 
   // CORS with credentials so the Better Auth cookie session works cross-origin in dev.
   await app.register(cors, {

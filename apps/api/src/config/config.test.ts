@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig, sanitizedConfig } from './index.js';
+import { loadConfig, sanitizedConfig, trustProxyOption } from './index.js';
 
 const base = {
   DATABASE_URL: 'postgres://u:secretpw@localhost:5432/db',
@@ -13,6 +13,21 @@ describe('config', () => {
     const config = loadConfig({ ...base });
     expect(config.PORT).toBe(8080);
     expect(config.TRUSTED_ORIGINS).toEqual(['http://localhost:5173', 'http://localhost:8080']);
+    expect(config.TRUSTED_PROXIES).toEqual([]);
+    expect(trustProxyOption(config)).toBe(false);
+  });
+
+  it('parses explicit TRUSTED_PROXIES IP/CIDR list for reverse-proxy mode', () => {
+    const config = loadConfig({
+      ...base,
+      TRUSTED_PROXIES: '127.0.0.1, 10.0.0.0/8',
+    });
+    expect(config.TRUSTED_PROXIES).toEqual(['127.0.0.1', '10.0.0.0/8']);
+    expect(trustProxyOption(config)).toEqual(['127.0.0.1', '10.0.0.0/8']);
+  });
+
+  it('rejects invalid TRUSTED_PROXIES entries', () => {
+    expect(() => loadConfig({ ...base, TRUSTED_PROXIES: 'not-an-ip' })).toThrow(/TRUSTED_PROXIES/);
   });
 
   it('aborts when a required secret is missing (AC-007)', () => {
@@ -30,5 +45,6 @@ describe('config', () => {
     const safe = sanitizedConfig(config);
     expect(safe.BETTER_AUTH_SECRET).toBe('[REDACTED]');
     expect(String(safe.DATABASE_URL)).not.toContain('secretpw');
+    expect(safe.TRUSTED_PROXIES).toEqual([]);
   });
 });
