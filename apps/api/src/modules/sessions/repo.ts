@@ -36,7 +36,7 @@ export async function pickNextProblem(db: Db, subjectId: string): Promise<Select
       id: problems.id,
       problemKey: problems.problemKey,
       definition: problems.definition,
-      programVersion: programs.version,
+      contentVersion: problems.version,
     })
     .from(problems)
     .innerJoin(programs, eq(problems.programId, programs.id))
@@ -56,7 +56,7 @@ export async function pickNextProblem(db: Db, subjectId: string): Promise<Select
     id: row.id,
     problemKey: row.problemKey,
     definition: row.definition as ProblemDefinitionFixture,
-    contentVersion: row.programVersion,
+    contentVersion: row.contentVersion,
   };
 }
 

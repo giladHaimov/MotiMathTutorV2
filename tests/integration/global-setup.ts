@@ -24,6 +24,13 @@ export default async function setup(): Promise<void> {
   // Import canonical content using the real importer.
   const { db, closePool } = await import('../../apps/api/src/db/index.js');
   const { importCanonicalContent } = await import('../../apps/api/src/modules/content/importer.js');
+  const { problems } = await import('../../apps/api/src/db/schema/product.js');
+  const { like } = await import('drizzle-orm');
   await importCanonicalContent(db);
+  // Retire any leftover historical-pinning fixtures from prior failed runs.
+  await db
+    .update(problems)
+    .set({ status: 'RETIRED' })
+    .where(like(problems.problemKey, 'EX-PIN-HIST%'));
   await closePool();
 }

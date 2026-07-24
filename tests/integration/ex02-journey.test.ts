@@ -3,7 +3,12 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { makeApp, registerUser, newUuid, type TestUser } from '../helpers/app.js';
 import { closePool, db } from '../../apps/api/src/db/index.js';
-import { learningEvents, stageAttempts } from '../../apps/api/src/db/schema/product.js';
+import {
+  learningEvents,
+  learningSessions,
+  problems,
+  stageAttempts,
+} from '../../apps/api/src/db/schema/product.js';
 import type { ActionType, PublicSession } from '@app/contracts';
 
 let app: FastifyInstance;
@@ -77,6 +82,7 @@ describe('EX-02 ratio journey (real API + PostgreSQL)', () => {
     session = await startSession(user);
     expect(session.visible_chunks).toHaveLength(1);
     expect(session.visible_chunks[0]?.content).toContain('ratio 2:3');
+    expect(session.content_version).toBe(2);
 
     const premature = await act(user, session, 'SUBMIT_FINAL_ANSWER', { value: '10' });
     expect(premature.status).toBe(200);
@@ -134,6 +140,37 @@ describe('EX-02 ratio journey (real API + PostgreSQL)', () => {
     }));
     ({ body: session } = await act(user, session, 'SUBMIT_FINAL_ANSWER', { value: '10' }));
     expect(session.status).toBe('COMPLETED');
+    expect(session.content_version).toBe(2);
+  });
+
+  it('EX-02 sessions persist and return content_version = 2 (problem version)', async () => {
+    const user = await registerUser(app);
+    let session = await startSession(user);
+    await completeEx01(user, session);
+    session = await startSession(user);
+    expect(session.content_version).toBe(2);
+
+    const [row] = await db
+      .select({
+        contentVersion: learningSessions.contentVersion,
+        problemId: learningSessions.problemId,
+      })
+      .from(learningSessions)
+      .where(eq(learningSessions.id, session.session_id));
+    expect(row!.contentVersion).toBe(2);
+
+    const [problem] = await db
+      .select({ version: problems.version, problemKey: problems.problemKey })
+      .from(problems)
+      .where(eq(problems.id, row!.problemId));
+    expect(problem!.problemKey).toBe('EX-02');
+    expect(problem!.version).toBe(2);
+
+    const resumed = await authed(user, {
+      method: 'GET',
+      url: `/api/sessions/${session.session_id}`,
+    });
+    expect((resumed.json() as PublicSession).content_version).toBe(2);
   });
 
   it('resumes while acknowledgment is pending (blocked state)', async () => {

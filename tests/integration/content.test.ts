@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { makeApp, registerUser, type TestUser } from '../helpers/app.js';
 import { closePool, db } from '../../apps/api/src/db/index.js';
-import { problems } from '../../apps/api/src/db/schema/product.js';
+import { learningSessions, problems } from '../../apps/api/src/db/schema/product.js';
 import { importCanonicalContent } from '../../apps/api/src/modules/content/importer.js';
 import type { PublicSession } from '@app/contracts';
 
@@ -36,7 +36,24 @@ describe('content import and disclosure (J-11)', () => {
       await app.inject({ method: 'POST', url: '/api/sessions', headers: { cookie: user.cookie } })
     ).json() as PublicSession;
     expect(started.engine_version).toBe('1.0.0');
-    expect(started.content_version).toBeGreaterThanOrEqual(1);
+
+    const [sessionRow] = await db
+      .select({
+        problemId: learningSessions.problemId,
+        contentVersion: learningSessions.contentVersion,
+      })
+      .from(learningSessions)
+      .where(eq(learningSessions.id, started.session_id));
+    const [problem] = await db
+      .select({ version: problems.version, problemKey: problems.problemKey })
+      .from(problems)
+      .where(eq(problems.id, sessionRow!.problemId));
+
+    // content_version must be the selected problem version (not programs.version).
+    expect(started.content_version).toBe(problem!.version);
+    expect(sessionRow!.contentVersion).toBe(problem!.version);
+    expect(problem!.problemKey).toBe('EX-01');
+    expect(problem!.version).toBe(1);
   });
 
   it('never exposes raw full problem text through the public API (AC-012, PB-004)', async () => {
