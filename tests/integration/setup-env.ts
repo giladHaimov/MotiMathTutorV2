@@ -9,5 +9,7 @@ setDefault('DATABASE_URL', 'postgres://postgres:postgres@localhost:5439/reasonin
 setDefault('BETTER_AUTH_SECRET', 'integration-test-secret-please-change-32');
 setDefault('BETTER_AUTH_URL', 'http://localhost:8080');
 setDefault('TRUSTED_ORIGINS', 'http://localhost:8080');
+// Test-only: honor unique X-Forwarded-For isolation without weakening production defaults.
+setDefault('TRUSTED_PROXIES', '127.0.0.1');
 setDefault('LOG_LEVEL', 'silent');
 setDefault('ENGINE_VERSION', '1.0.0');

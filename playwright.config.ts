@@ -15,6 +15,8 @@ const env = {
   BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? 'e2e-test-secret-please-change-32chars',
   BETTER_AUTH_URL: BASE_URL,
   TRUSTED_ORIGINS: BASE_URL,
+  // Test-only: honor unique X-Forwarded-For isolation (production default remains empty).
+  TRUSTED_PROXIES: '127.0.0.1',
   LOG_LEVEL: 'warn',
   ENGINE_VERSION: '1.0.0',
 };

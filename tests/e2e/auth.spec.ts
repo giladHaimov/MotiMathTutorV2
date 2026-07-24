@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 
 // SCN-01: register → logout → LOG IN (real credentials) → dashboard → logout.
 test('register, logout, log back in with real credentials, logout again', async ({ page }) => {
