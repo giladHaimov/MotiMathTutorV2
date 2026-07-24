@@ -16,6 +16,7 @@ import {
   shouldRetainPendingForRetry,
   type PendingAction,
 } from '../lib/api/pending-action.js';
+import { reconcilePendingWithSession } from '../lib/api/reconcile-pending.js';
 import { subscribeAppResume, subscribeOnlineStatus } from '../lib/platform.js';
 import { AuthView } from '../features/auth/AuthView.js';
 import { DashboardView } from '../features/dashboard/DashboardView.js';
@@ -42,16 +43,18 @@ export function App(): React.JSX.Element {
   const sessionRef = useRef<PublicSession | null>(null);
   sessionRef.current = session;
 
-  const applyRestoredPending = useCallback((sessionId: string): PendingAction | null => {
+  /**
+   * Reconcile every restored pending action against authoritative server state
+   * before terminal UI (final-answer lost-response / AC-048 resume).
+   */
+  const applyReconciledPending = useCallback((s: PublicSession): PendingAction | null => {
     const stored = loadPendingAction();
-    if (stored && stored.session_id === sessionId) {
-      setPending(stored);
+    const result = reconcilePendingWithSession(s, stored);
+    if (result.kind === 'retry') {
+      setPending(result.pending);
       setUx('retry');
       setBanner('Unsent action found. Tap Retry to resend the same action.');
-      return stored;
-    }
-    if (stored && stored.session_id !== sessionId) {
-      clearPendingAction();
+      return result.pending;
     }
     setPending(null);
     setUx('idle');
@@ -85,16 +88,27 @@ export function App(): React.JSX.Element {
     async (sessionId: string): Promise<void> => {
       const s = await api.getSession(sessionId);
       setSession(s);
-      const restored = applyRestoredPending(sessionId);
+      const restored = applyReconciledPending(s);
       if (!restored) {
         setBanner(s.message);
       }
     },
-    [applyRestoredPending],
+    [applyReconciledPending],
   );
 
+  // After refresh/restart: if a pending action exists, open that session and
+  // reconcile against authoritative state before terminal UI (including COMPLETED).
+  useEffect(() => {
+    if (auth !== 'authed' || session) return;
+    const stored = loadPendingAction();
+    if (!stored) return;
+    void openSession(stored.session_id).catch(() => {
+      // Ownership/network failure — leave dashboard; do not invent state.
+    });
+  }, [auth, session, openSession]);
+
   // App lifecycle / tab resume: reload authoritative server state (AC-049),
-  // then re-attach any persisted pending action for exactly-once retry.
+  // then reconcile any persisted pending action before terminal UI.
   useEffect(() => {
     if (auth !== 'authed') return;
     return subscribeAppResume(() => {
@@ -104,14 +118,14 @@ export function App(): React.JSX.Element {
         .getSession(current.session_id)
         .then((s) => {
           setSession(s);
-          const restored = applyRestoredPending(s.session_id);
+          const restored = applyReconciledPending(s);
           if (!restored && s.message) setBanner(s.message);
         })
         .catch(() => {
           // Keep local presentation; next user action will reconcile.
         });
     });
-  }, [auth, applyRestoredPending]);
+  }, [auth, applyReconciledPending]);
 
   useEffect(() => {
     if (!online && pending) {
@@ -250,7 +264,7 @@ export function App(): React.JSX.Element {
           onReload={() => void openSession(session.session_id)}
           onBack={() => {
             setSession(null);
-            // Keep persisted pending so Resume can retry after leaving the screen.
+            // Keep only unreconciled pending; resume will reconcile against server.
             const stored = loadPendingAction();
             setPending(stored && stored.session_id === session.session_id ? stored : null);
             setBanner(null);

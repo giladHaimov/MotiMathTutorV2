@@ -23,6 +23,8 @@
     "test:integration": "vitest run --project integration",
     "test:e2e": "npm run build --workspace @app/web && playwright test",
     "cap:sync": "npm run cap:sync --workspace @app/web",
+    "cap:dev": "npm run cap:dev --workspace @app/web",
+    "cap:release": "npm run cap:release --workspace @app/web",
     "cap:android:smoke": "bash scripts/capacitor-android-smoke.sh",
     "cap:ios:smoke": "bash scripts/capacitor-ios-smoke.sh",
     "db:generate": "drizzle-kit generate",

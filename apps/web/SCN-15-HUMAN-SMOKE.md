@@ -5,13 +5,54 @@ Record every Observable Result. Fail the scenario if any step diverges.
 
 ## Environment
 
-| Item              | Value                                                                                                                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API + PostgreSQL  | `docker compose up -d postgres` then API on `http://localhost:8080` (or deployed HTTPS API)                                                                                        |
-| Native API origin | **Development/test only:** `VITE_API_BASE_URL=http://10.0.2.2:8080` (Android emulator → host). **Production native:** `https://…` only. Browser builds must not set this variable. |
-| Build             | `VITE_API_BASE_URL=… npm run build --workspace @app/web && (cd apps/web && npx cap sync)`                                                                                          |
-| Launch            | `npx cap run android` / `npx cap run ios`                                                                                                                                          |
-| DB inspection     | `psql "$DATABASE_URL"` (or Docker exec into postgres)                                                                                                                              |
+| Item                 | Value                                                                                                                                                    |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API + PostgreSQL     | `docker compose up -d postgres` then API on `http://localhost:8080` (or deployed HTTPS API that also serves the SPA)                                     |
+| Auth                 | Better Auth **cookie sessions** only. Capacitor loads the SPA from the API origin (`CAPACITOR_SERVER_URL`) so cookies are same-origin. No bearer tokens. |
+| Production allowlist | Set `VITE_PRODUCTION_API_ORIGINS=https://your-api.example` (comma-separated HTTPS origins). Selected `CAPACITOR_SERVER_URL` must exactly match.          |
+
+### Exact build / run commands
+
+**HTTP development (emulator/device → local API; cleartext allowed in Android debug only):**
+
+```bash
+# Android emulator → host machine API
+export CAPACITOR_SERVER_URL=http://10.0.2.2:8080
+# Physical device on LAN (replace with host LAN IP)
+# export CAPACITOR_SERVER_URL=http://192.168.1.10:8080
+
+npm run cap:dev --workspace @app/web
+# or from apps/web after install:
+#   CAPACITOR_SERVER_URL=http://10.0.2.2:8080 npm run cap:dev
+
+npx cap run android   # debug build; cleartext permitted only in debug source set
+# npx cap run ios
+```
+
+Root convenience scripts:
+
+```bash
+CAPACITOR_SERVER_URL=http://10.0.2.2:8080 npm run cap:dev
+cd apps/web && npx cap run android
+```
+
+**Production / release packaging (HTTPS + allowlist; cleartext forbidden):**
+
+```bash
+export VITE_PRODUCTION_API_ORIGINS=https://api.example.com
+export CAPACITOR_SERVER_URL=https://api.example.com
+export CAPACITOR_PACKAGE_MODE=production
+npm run cap:release --workspace @app/web
+cd apps/web && npx cap run android --configuration release
+# or: ./gradlew assembleRelease
+```
+
+| Mode        | Command                                               | HTTP cleartext                   |
+| ----------- | ----------------------------------------------------- | -------------------------------- |
+| Development | `npm run cap:dev` (+ `CAPACITOR_SERVER_URL=http://…`) | Yes — Android **debug** only     |
+| Release     | `npm run cap:release` (+ HTTPS allowlisted URL)       | No — release/main deny cleartext |
+
+Browser builds must not set `VITE_API_BASE_URL`. Prefer Capacitor `server.url` same-origin cookies over absolute API bases.
 
 ## Preconditions
 
@@ -21,7 +62,7 @@ Record every Observable Result. Fail the scenario if any step diverges.
 
 ---
 
-## Procedure A — Server committed + response lost → exactly-once replay
+## Procedure A — Server committed + response lost → reconcile on resume (no duplicate)
 
 ### Steps
 
@@ -30,7 +71,7 @@ Record every Observable Result. Fail the scenario if any step diverges.
 3. Arm response loss: configure proxy to **allow the request to reach the API**, then **drop/abort the response body** for the first `POST /api/sessions/:id/actions`.
 4. Assign token `ex01-c0-whole` → slot `WHOLE`.
 5. Observe client: network/retry UI; **Retry same action** visible; UI `state_version` still `0`.
-6. **Authoritative DB check** (before retry):
+6. **Authoritative DB check** (before retry / after kill):
 
 ```sql
 SELECT state_version,
@@ -46,21 +87,30 @@ ORDER BY sequence_no;
 
 Expected: `learning_sessions.state_version = 1`, WHOLE occupied; exactly **one** `stage_attempts` row for that `client_action_id` with outcome `ACCEPTED`.
 
-7. Optional kill/resume: force-stop the app or reload WebView; reopen session. Confirm **Retry** still offered and `pending-action-id` / stored pending matches the same UUID.
-8. Tap **Retry same action** (network healthy).
-9. Observe client: `state_version = 1`, slot label `40 students`, Retry gone.
+7. Force-stop the app or reload WebView; reopen / Resume session.
+8. Observe: authoritative UI at `state_version = 1`; **pending action reconciled/cleared**; Retry **not** required for the already-committed action (no duplicate POST).
+9. Same-tab path without reload: if response is lost and UI still shows Retry before resume, tap **Retry same action** — must reuse the original `client_action_id` (idempotent).
 
 ### Observable results (must all hold)
 
-| Check              | Expected                                                         |
-| ------------------ | ---------------------------------------------------------------- |
-| First UI response  | Failure / retry affordance; no duplicate slot UI                 |
-| DB after step 4–6  | One accepted attempt; session already at version 1               |
-| Retry request body | **Identical** `client_action_id` as first request                |
-| DB after retry     | Still **one** attempt row for that id; `state_version` remains 1 |
-| UI after retry     | Matches DB (WHOLE = 40 students)                                 |
+| Check                    | Expected                                                         |
+| ------------------------ | ---------------------------------------------------------------- |
+| First UI response        | Failure / retry affordance; no duplicate slot UI                 |
+| DB after step 4–6        | One accepted attempt; session already at version 1               |
+| After refresh/resume     | COMPLETED/advanced authoritative state; pending cleared          |
+| Same-tab Retry (if used) | **Identical** `client_action_id` as first request                |
+| DB after any retry       | Still **one** attempt row for that id; `state_version` unchanged |
 
-**Pass criterion:** server applied the action once; client recovered via idempotent replay after lost response and after refresh/restart.
+**Pass criterion:** server applied the action once; client recovered via reconcile on resume and/or idempotent replay — never a second semantic apply.
+
+---
+
+## Procedure A2 — Final-answer lost response → COMPLETED reconcile
+
+1. Reach final-answer controls on EX-01 (answer `12`).
+2. Drop the response after `SUBMIT_FINAL_ANSWER` reaches the server.
+3. Refresh / force-stop → Resume.
+4. UI shows authoritative **COMPLETED**; pending final-answer action cleared; no stranded Retry; no duplicate attempt in DB.
 
 ---
 
@@ -102,10 +152,10 @@ UI `state_version`, visible chunks, and slot labels **equal** the SQL row. Clien
 
 ## Record
 
-| Platform | A lost-response+retry | A after app restart | B conflict | C resume=DB | Build | Pass/Fail | Tester | Date |
-| -------- | --------------------- | ------------------- | ---------- | ----------- | ----- | --------- | ------ | ---- |
-| Android  |                       |                     |            |             |       |           |        |      |
-| iOS      |                       |                     |            |             |       |           |        |      |
+| Platform | A lost-response+reconcile | A2 final-answer | B conflict | C resume=DB | Build mode (dev/release) | Pass/Fail | Tester | Date |
+| -------- | ------------------------- | --------------- | ---------- | ----------- | ------------------------ | --------- | ------ | ---- |
+| Android  |                           |                 |            |             |                          |           |        |      |
+| iOS      |                           |                 |            |             |                          |           |        |      |
 
 Owner sign-off: ______________________ Date: __________
 

@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.js';
 import { toAuthHeaders } from './headers.js';
-import { shouldIssueBearerToken } from './native-client.js';
 import { getOrCreateProfile, type Profile } from '../modules/profile/service.js';
 import { db } from '../db/index.js';
 import { sendError } from '../http/errors.js';
@@ -22,8 +21,7 @@ declare module 'fastify' {
  * Mount Better Auth's handler at /api/auth/* (ARCHITECTURE §6). Better Auth owns
  * registration, login, logout, and session cookies (AC-001/003).
  *
- * Bearer `set-auth-token` is issued only to native Capacitor clients that send
- * `X-Client-Platform: capacitor`. Browser clients receive cookies only.
+ * Cookie sessions only — never forward `set-auth-token` / bearer issuance.
  */
 export function registerAuthRoutes(app: FastifyInstance): void {
   app.route({
@@ -42,19 +40,18 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       });
 
       const response = await auth.handler(webRequest);
-      const issueBearer = shouldIssueBearerToken(request.headers);
       reply.status(response.status);
       response.headers.forEach((value, key) => {
         const lower = key.toLowerCase();
-        if (lower === 'set-auth-token') {
-          if (!issueBearer) return;
-          reply.header('set-auth-token', value);
-          reply.header('access-control-expose-headers', 'set-auth-token');
-          return;
-        }
+        // Strip any bearer-token issuance headers if a plugin ever reintroduces them.
+        if (lower === 'set-auth-token') return;
         if (lower === 'access-control-expose-headers') {
-          // Drop Better Auth's expose list for browser clients; native path sets it above.
-          if (!issueBearer) return;
+          const filtered = value
+            .split(',')
+            .map((h) => h.trim())
+            .filter((h) => h.toLowerCase() !== 'set-auth-token');
+          if (filtered.length === 0) return;
+          reply.header(key, filtered.join(', '));
           return;
         }
         if (lower === 'set-cookie') {

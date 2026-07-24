@@ -16,6 +16,16 @@ async function register(page: Page, label: string): Promise<void> {
   await expect(page.getByTestId('dashboard')).toBeVisible();
 }
 
+async function assignToken(page: Page, tokenId: string, slot: string): Promise<void> {
+  await page.getByTestId(`token-${tokenId}`).click();
+  await page.getByTestId(`assign-${slot}`).click();
+}
+
+async function continueWhenReady(page: Page): Promise<void> {
+  await expect(page.getByTestId('continue')).toBeEnabled();
+  await page.getByTestId('continue').click();
+}
+
 /**
  * SCN / AC-048: response lost after the server accepted the action; client retries
  * with the same `client_action_id` and state advances once.
@@ -65,11 +75,11 @@ test('AC-048 lost response then retry reuses same client_action_id', async ({ pa
 });
 
 /**
- * AC-048 after refresh: pending action + client_action_id survive reload; retry
- * is exactly-once against the already-committed server attempt.
+ * AC-048 after refresh when server already committed: pending is reconciled/cleared;
+ * authoritative state is shown; no duplicate retry attempt.
  */
-test('AC-048 pending action survives refresh and retries exactly once', async ({ page }) => {
-  await register(page, 'Retry After Refresh');
+test('AC-048 committed pending is cleared on resume (no duplicate)', async ({ page }) => {
+  await register(page, 'Reconcile After Refresh');
   await page.getByTestId('start-session').click();
   await expect(page.getByTestId('problem-screen')).toBeVisible();
 
@@ -105,24 +115,86 @@ test('AC-048 pending action survives refresh and retries exactly once', async ({
   expect(storedBefore).toContain(originalId);
 
   await page.reload();
-  await expect(page.getByTestId('dashboard')).toBeVisible();
-  await page.getByTestId('resume-session').click();
+  // Boot opens the pending session and reconciles: authoritative state, pending cleared.
   await expect(page.getByTestId('problem-screen')).toBeVisible();
-  await expect(page.getByTestId('retry-action')).toBeVisible();
-  await expect(page.getByTestId('pending-action-id')).toHaveText(originalId);
-  // Authoritative resume loads server state (already advanced); pending retry remains.
-  await expect(page.getByTestId('state-version')).toHaveText('1');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
-
-  await page.getByTestId('retry-action').click();
   await expect(page.getByTestId('state-version')).toHaveText('1');
   await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
   await expect(page.getByTestId('retry-action')).toHaveCount(0);
   await expect(page.getByTestId('pending-action-id')).toHaveCount(0);
 
-  expect(actionBodies.length).toBe(2);
+  expect(actionBodies.length).toBe(1);
   expect(actionBodies[0]!.client_action_id).toBe(originalId);
-  expect(actionBodies[1]!.client_action_id).toBe(originalId);
+
+  const storedAfter = await page.evaluate(() =>
+    localStorage.getItem('reasoning_tutor_pending_action'),
+  );
+  expect(storedAfter).toBeNull();
+});
+
+/**
+ * Final-answer lost response: server COMPLETED → refresh → reconcile clears pending;
+ * COMPLETED UI; no duplicate SUBMIT_FINAL_ANSWER.
+ */
+test('final-answer lost response reconciles to COMPLETED without duplicate', async ({ page }) => {
+  await register(page, 'Final Answer Reconcile');
+  await page.getByTestId('start-session').click();
+  await expect(page.getByTestId('problem-screen')).toBeVisible();
+
+  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
+  await continueWhenReady(page);
+  await assignToken(page, 'ex01-c1-percent', 'PART_IN_PERCENTAGE');
+  await continueWhenReady(page);
+  await assignToken(page, 'ex01-c2-unknown', 'UNKNOWN');
+  await expect(page.getByTestId('final-answer-input')).toBeVisible();
+
+  const actionBodies: Array<{ client_action_id: string; action_type: string }> = [];
+  let droppedFinal = false;
+
+  await page.route('**/api/sessions/*/actions', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const body = route.request().postDataJSON() as {
+      client_action_id: string;
+      action_type: string;
+    };
+    actionBodies.push({
+      client_action_id: body.client_action_id,
+      action_type: body.action_type,
+    });
+
+    if (body.action_type === 'SUBMIT_FINAL_ANSWER' && !droppedFinal) {
+      droppedFinal = true;
+      await route.fetch();
+      await route.abort('connectionfailed');
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.getByTestId('final-answer-input').fill('12');
+  await page.getByTestId('submit-answer').click();
+  await expect(page.getByTestId('retry-action')).toBeVisible();
+  const pendingId = await page.getByTestId('pending-action-id').innerText();
+
+  const storedBefore = await page.evaluate(() =>
+    localStorage.getItem('reasoning_tutor_pending_action'),
+  );
+  expect(storedBefore).toContain(pendingId);
+
+  await page.reload();
+  // Boot opens the pending session and reconciles to authoritative COMPLETED
+  // (dashboard has no resume for COMPLETED sessions).
+  await expect(page.getByTestId('problem-screen')).toBeVisible();
+  await expect(page.getByTestId('completed')).toBeVisible();
+  await expect(page.getByTestId('status')).toHaveText('COMPLETED');
+  await expect(page.getByTestId('retry-action')).toHaveCount(0);
+  await expect(page.getByTestId('pending-action-id')).toHaveCount(0);
+
+  const finals = actionBodies.filter((b) => b.action_type === 'SUBMIT_FINAL_ANSWER');
+  expect(finals.length).toBe(1);
+  expect(finals[0]!.client_action_id).toBe(pendingId);
 
   const storedAfter = await page.evaluate(() =>
     localStorage.getItem('reasoning_tutor_pending_action'),

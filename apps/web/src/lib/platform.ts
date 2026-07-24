@@ -1,14 +1,17 @@
-import { KeychainAccess, SecureStorage } from '@aparajita/capacitor-secure-storage';
-import { apiBaseUrlForRuntime, viteModeToRuntime, type ClientRuntimeMode } from './api-base-url.js';
-
-/** Header native Capacitor clients send so the API may issue bearer tokens. */
-export const NATIVE_CLIENT_HEADER = 'X-Client-Platform';
-export const NATIVE_CLIENT_VALUE = 'capacitor';
+import {
+  apiBaseUrlForRuntime,
+  assertNativeRuntimeOrigins,
+  viteModeToRuntime,
+  type ClientRuntimeMode,
+} from './api-base-url.js';
 
 /**
  * Thin Capacitor/platform helpers. Semantic validity is never decided here —
- * these only handle native packaging concerns (secure auth token storage,
- * connectivity, app lifecycle resume) per ARCHITECTURE §17.
+ * packaging, connectivity, and app lifecycle only (ARCHITECTURE §17).
+ *
+ * Authentication is Better Auth **cookie sessions** for both browser and
+ * Capacitor WebView (same-origin via Capacitor `server.url` when packaged).
+ * No bearer tokens / caller-controlled native proofs.
  */
 
 export function isNativePlatform(): boolean {
@@ -25,56 +28,37 @@ function runtimeMode(): ClientRuntimeMode {
   return viteModeToRuntime(import.meta.env.MODE, import.meta.env.PROD);
 }
 
-/** API origin: empty in browser; validated absolute URL on native only. */
+function httpDevEnabled(): boolean {
+  return import.meta.env.VITE_CAPACITOR_HTTP_DEV === '1';
+}
+
+/**
+ * Fail build/startup when production native origin policy is violated.
+ */
+export function assertPlatformApiOrigins(): void {
+  assertNativeRuntimeOrigins({
+    isNative: isNativePlatform(),
+    mode: runtimeMode(),
+    httpDev: httpDevEnabled(),
+    viteApiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+    capacitorServerUrl: import.meta.env.VITE_CAPACITOR_SERVER_URL,
+    productionAllowlistRaw: import.meta.env.VITE_PRODUCTION_API_ORIGINS,
+  });
+}
+
+/**
+ * API origin for fetch:
+ * - Browser / Capacitor same-origin packaging: empty (relative `/api`).
+ * - Optional absolute native override only when explicitly configured.
+ */
 export function apiBaseUrl(): string {
   return apiBaseUrlForRuntime({
     isNative: isNativePlatform(),
     viteApiBaseUrl: import.meta.env.VITE_API_BASE_URL,
     mode: runtimeMode(),
+    httpDev: httpDevEnabled(),
+    productionAllowlistRaw: import.meta.env.VITE_PRODUCTION_API_ORIGINS,
   });
-}
-
-const AUTH_TOKEN_KEY = 'auth_token';
-
-let secureReady: Promise<void> | null = null;
-
-async function ensureSecureStorage(): Promise<void> {
-  if (!secureReady) {
-    secureReady = (async () => {
-      await SecureStorage.setKeyPrefix('reasoning_tutor_');
-      await SecureStorage.setSynchronize(false);
-      // Device-local keychain item — does not migrate via iCloud/encrypted backups.
-      await SecureStorage.setDefaultKeychainAccess(KeychainAccess.whenUnlockedThisDeviceOnly);
-    })();
-  }
-  await secureReady;
-}
-
-export async function loadStoredAuthToken(): Promise<string | null> {
-  if (!isNativePlatform()) return null;
-  try {
-    await ensureSecureStorage();
-    const value = await SecureStorage.getItem(AUTH_TOKEN_KEY);
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-export async function storeAuthToken(token: string): Promise<void> {
-  if (!isNativePlatform()) return;
-  await ensureSecureStorage();
-  await SecureStorage.setItem(AUTH_TOKEN_KEY, token);
-}
-
-export async function clearStoredAuthToken(): Promise<void> {
-  if (!isNativePlatform()) return;
-  try {
-    await ensureSecureStorage();
-    await SecureStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch {
-    // ignore
-  }
 }
 
 export function subscribeOnlineStatus(onChange: (online: boolean) => void): () => void {

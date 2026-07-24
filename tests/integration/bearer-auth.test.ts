@@ -22,11 +22,11 @@ function authTokenHeader(res: { headers: Record<string, unknown> }): string | nu
 }
 
 /**
- * Capacitor-approved bearer/session-token path (ARCHITECTURE §2 / §17).
- * Browser clients must not receive set-auth-token; native clients may.
+ * Cookie-session only: Better Auth never issues bearer / set-auth-token,
+ * including when caller-controlled native headers/origins are present.
  */
-describe('Better Auth bearer session token (native-only issuance)', () => {
-  it('does not issue set-auth-token to browser clients', async () => {
+describe('Better Auth cookie sessions (no bearer issuance)', () => {
+  it('issues cookie sessions for browser clients and never set-auth-token', async () => {
     const email = `browser-${randomUUID()}@example.com`;
     const signUp = await app.inject({
       method: 'POST',
@@ -50,7 +50,7 @@ describe('Better Auth bearer session token (native-only issuance)', () => {
     expect(me.statusCode).toBe(200);
   });
 
-  it('issues set-auth-token only to native Capacitor clients and accepts Bearer', async () => {
+  it('does not issue set-auth-token for Capacitor-like headers/origins', async () => {
     const email = `native-${randomUUID()}@example.com`;
     const signUp = await app.inject({
       method: 'POST',
@@ -63,51 +63,22 @@ describe('Better Auth bearer session token (native-only issuance)', () => {
       payload: { email, password: 'Passw0rd!123', name: 'Native User' },
     });
     expect(signUp.statusCode).toBeLessThan(400);
-    const bearer = authTokenHeader(signUp);
-    expect(bearer).toBeTruthy();
+    expect(authTokenHeader(signUp)).toBeNull();
 
     const exposed = signUp.headers['access-control-expose-headers'];
     const exposedText = Array.isArray(exposed) ? exposed.join(',') : String(exposed ?? '');
-    expect(exposedText.toLowerCase()).toContain('set-auth-token');
+    expect(exposedText.toLowerCase()).not.toContain('set-auth-token');
 
+    // Cookie path still works when Origin is a trusted Capacitor packaging origin.
+    expect(signUp.cookies.some((c) => c.name.includes('session_token'))).toBe(true);
+  });
+
+  it('Authorization Bearer is not an approved auth path', async () => {
     const me = await app.inject({
       method: 'GET',
       url: '/api/me',
-      headers: { authorization: `Bearer ${bearer}` },
+      headers: { authorization: 'Bearer not-a-real-token' },
     });
-    expect(me.statusCode).toBe(200);
-    const body = me.json() as { analytics_subject_id: string };
-    expect(body.analytics_subject_id).toMatch(/^[0-9a-f-]{36}$/);
-  });
-
-  it('Origin spoof alone does not issue a bearer token', async () => {
-    const email = `spoof-${randomUUID()}@example.com`;
-    const signUp = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-up/email',
-      headers: {
-        'x-forwarded-for': uniqueTestIp(email),
-        origin: 'capacitor://localhost',
-      },
-      payload: { email, password: 'Passw0rd!123', name: 'Spoof User' },
-    });
-    expect(signUp.statusCode).toBeLessThan(400);
-    expect(authTokenHeader(signUp)).toBeNull();
-  });
-
-  it('spoofed X-Client-Platform from a browser Origin does not issue a bearer token', async () => {
-    const email = `header-spoof-${randomUUID()}@example.com`;
-    const signUp = await app.inject({
-      method: 'POST',
-      url: '/api/auth/sign-up/email',
-      headers: {
-        'x-forwarded-for': uniqueTestIp(email),
-        'x-client-platform': 'capacitor',
-        origin: 'http://localhost:5173',
-      },
-      payload: { email, password: 'Passw0rd!123', name: 'Header Spoof' },
-    });
-    expect(signUp.statusCode).toBeLessThan(400);
-    expect(authTokenHeader(signUp)).toBeNull();
+    expect(me.statusCode).toBe(401);
   });
 });

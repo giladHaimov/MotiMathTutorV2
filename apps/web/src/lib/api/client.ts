@@ -1,21 +1,12 @@
 import type { ActionRequest, Dashboard, Me, PublicSession } from '@app/contracts';
-import {
-  apiBaseUrl,
-  clearStoredAuthToken,
-  isNativePlatform,
-  loadStoredAuthToken,
-  NATIVE_CLIENT_HEADER,
-  NATIVE_CLIENT_VALUE,
-  storeAuthToken,
-} from '../platform.js';
+import { apiBaseUrl, assertPlatformApiOrigins } from '../platform.js';
 
 /**
  * Thin API client. The client only renders server state and sends structured
  * actions — it never decides semantic validity (PB-039 / AC-050).
  *
- * Web uses Better Auth cookie sessions only. Capacitor native uses the approved
- * bearer/session-token path: token issued only to native clients, stored in
- * Keychain/Keystore-backed secure storage, sent as `Authorization: Bearer`.
+ * Authentication: Better Auth **cookie sessions** for browser and Capacitor
+ * (`credentials: 'include'`). No bearer tokens are issued or stored.
  */
 
 export interface ApiError {
@@ -42,17 +33,9 @@ export class NetworkError extends Error {
   }
 }
 
-let bearerToken: string | null = null;
-let tokenReady: Promise<void> | null = null;
-
-/** Load any securely stored bearer token once at startup (native only). */
 export function initApiClient(): Promise<void> {
-  if (!tokenReady) {
-    tokenReady = (async () => {
-      bearerToken = await loadStoredAuthToken();
-    })();
-  }
-  return tokenReady;
+  assertPlatformApiOrigins();
+  return Promise.resolve();
 }
 
 function resolveUrl(path: string): string {
@@ -60,31 +43,12 @@ function resolveUrl(path: string): string {
   return base ? `${base}${path}` : path;
 }
 
-function baseHeaders(extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    ...(extra ?? {}),
-  };
-  if (isNativePlatform()) {
-    headers[NATIVE_CLIENT_HEADER] = NATIVE_CLIENT_VALUE;
-    if (bearerToken) {
-      headers.Authorization = `Bearer ${bearerToken}`;
-    }
-  }
-  return headers;
-}
-
-async function maybeCaptureAuthToken(res: Response): Promise<void> {
-  if (!isNativePlatform()) return;
-  const token = res.headers.get('set-auth-token');
-  if (!token) return;
-  bearerToken = token;
-  await storeAuthToken(token);
-}
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   await initApiClient();
-  const headers = baseHeaders(init.headers as Record<string, string> | undefined);
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    ...(init.headers as Record<string, string> | undefined),
+  };
 
   let res: Response;
   try {
@@ -96,8 +60,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   } catch {
     throw new NetworkError();
   }
-
-  await maybeCaptureAuthToken(res);
 
   const text = await res.text();
   let data: unknown = null;
@@ -137,14 +99,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
-  signOut: async () => {
-    try {
-      await request<unknown>('/api/auth/sign-out', { method: 'POST', body: '{}' });
-    } finally {
-      bearerToken = null;
-      await clearStoredAuthToken();
-    }
-  },
+  signOut: () => request<unknown>('/api/auth/sign-out', { method: 'POST', body: '{}' }),
   me: () => request<Me>('/api/me'),
   dashboard: () => request<Dashboard>('/api/dashboard'),
   startSession: () => request<PublicSession>('/api/sessions', { method: 'POST', body: '{}' }),

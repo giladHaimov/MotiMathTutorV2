@@ -39,19 +39,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('auth', createAuth(config));
   app.decorate('appConfig', config);
 
-  // CORS with credentials so the Better Auth cookie session works cross-origin in dev.
-  // Do NOT globally expose set-auth-token — native auth responses set exposure only
-  // when X-Client-Platform: capacitor is present (see auth/plugin.ts).
+  // CORS with credentials so Better Auth cookie sessions work for trusted origins.
   await app.register(cors, {
     origin: config.TRUSTED_ORIGINS.length > 0 ? config.TRUSTED_ORIGINS : false,
     credentials: true,
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Client-Platform',
-      'X-Request-Id',
-      'X-Forwarded-For',
-    ],
+    allowedHeaders: ['Content-Type', 'X-Request-Id', 'X-Forwarded-For'],
   });
 
   // Rate limiting on the whole surface; auth + action submission are the sensitive ones.
