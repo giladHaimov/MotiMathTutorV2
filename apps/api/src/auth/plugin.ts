@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.js';
 import { toAuthHeaders } from './headers.js';
+import { shouldIssueBearerToken } from './native-client.js';
 import { getOrCreateProfile, type Profile } from '../modules/profile/service.js';
 import { db } from '../db/index.js';
 import { sendError } from '../http/errors.js';
@@ -20,13 +21,14 @@ declare module 'fastify' {
 /**
  * Mount Better Auth's handler at /api/auth/* (ARCHITECTURE §6). Better Auth owns
  * registration, login, logout, and session cookies (AC-001/003).
+ *
+ * Bearer `set-auth-token` is issued only to native Capacitor clients that send
+ * `X-Client-Platform: capacitor`. Browser clients receive cookies only.
  */
 export function registerAuthRoutes(app: FastifyInstance): void {
   app.route({
     method: ['GET', 'POST'],
     url: '/api/auth/*',
-    // Better Auth needs the raw request; disable Fastify's rate limit here is not
-    // needed — auth rate limiting is applied globally where configured.
     async handler(request: FastifyRequest, reply: FastifyReply) {
       const auth = request.server.auth;
       const url = new URL(request.url, `${request.protocol}://${request.hostname}`);
@@ -40,10 +42,22 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       });
 
       const response = await auth.handler(webRequest);
+      const issueBearer = shouldIssueBearerToken(request.headers);
       reply.status(response.status);
       response.headers.forEach((value, key) => {
-        // Preserve multiple Set-Cookie headers.
-        if (key.toLowerCase() === 'set-cookie') {
+        const lower = key.toLowerCase();
+        if (lower === 'set-auth-token') {
+          if (!issueBearer) return;
+          reply.header('set-auth-token', value);
+          reply.header('access-control-expose-headers', 'set-auth-token');
+          return;
+        }
+        if (lower === 'access-control-expose-headers') {
+          // Drop Better Auth's expose list for browser clients; native path sets it above.
+          if (!issueBearer) return;
+          return;
+        }
+        if (lower === 'set-cookie') {
           reply.header('set-cookie', value);
         } else {
           reply.header(key, value);

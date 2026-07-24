@@ -18,8 +18,9 @@ import * as authSchema from '../db/schema/auth-schema.js';
  * so direct clients cannot spoof their IP for per-IP rate limits.
  *
  * The bearer plugin enables the approved Capacitor session-token path
- * (ARCHITECTURE §2 / §17): clients may authenticate with
- * `Authorization: Bearer <session token>` in addition to cookies.
+ * (ARCHITECTURE §2 / §17). Issuance of `set-auth-token` is restricted in
+ * `auth/plugin.ts` to clients that send `X-Client-Platform: capacitor`.
+ * Browser clients authenticate with cookies only.
  */
 export function createAuth(config: AppConfig) {
   const trustForwardedIp = config.TRUSTED_PROXIES.length > 0;

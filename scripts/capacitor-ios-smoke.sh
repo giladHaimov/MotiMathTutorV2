@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
-# AC-047: Capacitor iOS project builds when a full Xcode environment is available.
-# When only Command Line Tools are present (no xcodebuild), the check is skipped
-# with an explicit message — Gate C / SCN-15 still require human simulator smoke
-# on a machine with Xcode.
+# AC-047: Capacitor iOS project build smoke.
+#
+# Default: FAIL when full Xcode / xcodebuild is unavailable — never a silent PASS.
+# Skip is allowed ONLY when explicitly configured for a development environment:
+#   ALLOW_IOS_SMOKE_SKIP=1
+# and only when VERIFY_REQUIRE_IOS is not set to 1.
 #
 set -euo pipefail
 
@@ -12,14 +14,28 @@ WEB="$ROOT/apps/web"
 IOS="$WEB/ios"
 
 if [ ! -d "$IOS" ]; then
-  echo "iOS platform missing at $IOS — run: npx cap add ios (from apps/web)" >&2
+  echo "AC-047 FAIL: iOS platform missing at $IOS — run: npx cap add ios (from apps/web)" >&2
   exit 1
 fi
 
 if ! xcodebuild -version >/dev/null 2>&1; then
-  echo "AC-047 SKIP: full Xcode not available (xcodebuild missing)."
-  echo "iOS project is scaffolded under apps/web/ios; run human SCN-15 when Xcode is present."
-  exit 0
+  if [ "${VERIFY_REQUIRE_IOS:-0}" = "1" ]; then
+    echo "AC-047 FAIL: VERIFY_REQUIRE_IOS=1 but xcodebuild is unavailable." >&2
+    exit 1
+  fi
+  if [ "${ALLOW_IOS_SMOKE_SKIP:-0}" = "1" ]; then
+    echo "AC-047 SKIP (explicit): ALLOW_IOS_SMOKE_SKIP=1 and xcodebuild unavailable."
+    echo "This is not a PASS — iOS build was not validated. Do not treat as release evidence."
+    exit 0
+  fi
+  echo "AC-047 FAIL: full Xcode not available (xcodebuild missing)." >&2
+  echo "Install Xcode, or set ALLOW_IOS_SMOKE_SKIP=1 only in an explicit development environment." >&2
+  exit 1
+fi
+
+if [ ! -f "$IOS/App/App.xcworkspace/contents.xcworkspacedata" ] && [ ! -f "$IOS/App/Podfile" ]; then
+  echo "AC-047 FAIL: iOS project scaffolding incomplete" >&2
+  exit 1
 fi
 
 echo "Building web assets and syncing Capacitor iOS"

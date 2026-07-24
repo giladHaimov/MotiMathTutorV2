@@ -4,6 +4,8 @@ import {
   clearStoredAuthToken,
   isNativePlatform,
   loadStoredAuthToken,
+  NATIVE_CLIENT_HEADER,
+  NATIVE_CLIENT_VALUE,
   storeAuthToken,
 } from '../platform.js';
 
@@ -11,9 +13,9 @@ import {
  * Thin API client. The client only renders server state and sends structured
  * actions — it never decides semantic validity (PB-039 / AC-050).
  *
- * Web uses Better Auth cookie sessions. Capacitor native uses the approved
- * bearer/session-token path (ARCHITECTURE §2 / §17): token from
- * `set-auth-token`, stored in Preferences, sent as `Authorization: Bearer`.
+ * Web uses Better Auth cookie sessions only. Capacitor native uses the approved
+ * bearer/session-token path: token issued only to native clients, stored in
+ * Keychain/Keystore-backed secure storage, sent as `Authorization: Bearer`.
  */
 
 export interface ApiError {
@@ -43,7 +45,7 @@ export class NetworkError extends Error {
 let bearerToken: string | null = null;
 let tokenReady: Promise<void> | null = null;
 
-/** Load any Capacitor-stored bearer token once at startup. */
+/** Load any securely stored bearer token once at startup (native only). */
 export function initApiClient(): Promise<void> {
   if (!tokenReady) {
     tokenReady = (async () => {
@@ -58,25 +60,31 @@ function resolveUrl(path: string): string {
   return base ? `${base}${path}` : path;
 }
 
+function baseHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    ...(extra ?? {}),
+  };
+  if (isNativePlatform()) {
+    headers[NATIVE_CLIENT_HEADER] = NATIVE_CLIENT_VALUE;
+    if (bearerToken) {
+      headers.Authorization = `Bearer ${bearerToken}`;
+    }
+  }
+  return headers;
+}
+
 async function maybeCaptureAuthToken(res: Response): Promise<void> {
+  if (!isNativePlatform()) return;
   const token = res.headers.get('set-auth-token');
   if (!token) return;
-  // Persist bearer only on native; web continues to rely on cookies.
-  if (isNativePlatform()) {
-    bearerToken = token;
-    await storeAuthToken(token);
-  }
+  bearerToken = token;
+  await storeAuthToken(token);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   await initApiClient();
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-    ...(init.headers as Record<string, string> | undefined),
-  };
-  if (isNativePlatform() && bearerToken) {
-    headers.Authorization = `Bearer ${bearerToken}`;
-  }
+  const headers = baseHeaders(init.headers as Record<string, string> | undefined);
 
   let res: Response;
   try {

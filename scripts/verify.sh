@@ -66,7 +66,9 @@ npm run build
 log "Capacitor Android smoke (AC-046)"
 bash scripts/capacitor-android-smoke.sh
 
-log "Capacitor iOS smoke (AC-047; skips when Xcode unavailable)"
+log "Capacitor iOS smoke (AC-047)"
+# Default fails without Xcode. Local/CI hosts without Xcode must set
+# ALLOW_IOS_SMOKE_SKIP=1 explicitly — that is a documented skip, never a PASS.
 bash scripts/capacitor-ios-smoke.sh
 
 # 8. Container build + smoke + restart persistence.

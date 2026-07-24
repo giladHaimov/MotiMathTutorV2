@@ -25,4 +25,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run full verification gate
+        env:
+          # Ubuntu runners have no Xcode; skip is explicit and is not release evidence.
+          ALLOW_IOS_SMOKE_SKIP: '1'
         run: npm run verify

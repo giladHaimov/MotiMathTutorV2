@@ -65,6 +65,72 @@ test('AC-048 lost response then retry reuses same client_action_id', async ({ pa
 });
 
 /**
+ * AC-048 after refresh: pending action + client_action_id survive reload; retry
+ * is exactly-once against the already-committed server attempt.
+ */
+test('AC-048 pending action survives refresh and retries exactly once', async ({ page }) => {
+  await register(page, 'Retry After Refresh');
+  await page.getByTestId('start-session').click();
+  await expect(page.getByTestId('problem-screen')).toBeVisible();
+
+  const actionBodies: Array<{ client_action_id: string }> = [];
+  let droppedFirst = false;
+
+  await page.route('**/api/sessions/*/actions', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const body = route.request().postDataJSON() as { client_action_id: string };
+    actionBodies.push({ client_action_id: body.client_action_id });
+
+    if (!droppedFirst) {
+      droppedFirst = true;
+      await route.fetch();
+      await route.abort('connectionfailed');
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.getByTestId('token-ex01-c0-whole').click();
+  await page.getByTestId('assign-WHOLE').click();
+  await expect(page.getByTestId('retry-action')).toBeVisible();
+  const originalId = await page.getByTestId('pending-action-id').innerText();
+  expect(originalId.length).toBeGreaterThan(10);
+
+  const storedBefore = await page.evaluate(() =>
+    localStorage.getItem('reasoning_tutor_pending_action'),
+  );
+  expect(storedBefore).toContain(originalId);
+
+  await page.reload();
+  await expect(page.getByTestId('dashboard')).toBeVisible();
+  await page.getByTestId('resume-session').click();
+  await expect(page.getByTestId('problem-screen')).toBeVisible();
+  await expect(page.getByTestId('retry-action')).toBeVisible();
+  await expect(page.getByTestId('pending-action-id')).toHaveText(originalId);
+  // Authoritative resume loads server state (already advanced); pending retry remains.
+  await expect(page.getByTestId('state-version')).toHaveText('1');
+  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+
+  await page.getByTestId('retry-action').click();
+  await expect(page.getByTestId('state-version')).toHaveText('1');
+  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('retry-action')).toHaveCount(0);
+  await expect(page.getByTestId('pending-action-id')).toHaveCount(0);
+
+  expect(actionBodies.length).toBe(2);
+  expect(actionBodies[0]!.client_action_id).toBe(originalId);
+  expect(actionBodies[1]!.client_action_id).toBe(originalId);
+
+  const storedAfter = await page.evaluate(() =>
+    localStorage.getItem('reasoning_tutor_pending_action'),
+  );
+  expect(storedAfter).toBeNull();
+});
+
+/**
  * Stale-version conflict: UI reconciles to authoritative current_state (AC-018 client path).
  */
 test('stale version conflict reconciles UI to authoritative state', async ({ page }) => {

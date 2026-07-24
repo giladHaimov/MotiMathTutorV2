@@ -14,34 +14,61 @@ afterAll(async () => {
   await closePool();
 });
 
+function authTokenHeader(res: { headers: Record<string, unknown> }): string | null {
+  const raw = res.headers['set-auth-token'];
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw) && typeof raw[0] === 'string') return raw[0];
+  return null;
+}
+
 /**
  * Capacitor-approved bearer/session-token path (ARCHITECTURE §2 / §17).
- * Cookie sessions remain the web path; bearer authenticates without cookies.
+ * Browser clients must not receive set-auth-token; native clients may.
  */
-describe('Better Auth bearer session token (Capacitor path)', () => {
-  it('authenticates /api/me with Authorization Bearer and no cookie', async () => {
-    const email = `bearer-${randomUUID()}@example.com`;
+describe('Better Auth bearer session token (native-only issuance)', () => {
+  it('does not issue set-auth-token to browser clients', async () => {
+    const email = `browser-${randomUUID()}@example.com`;
     const signUp = await app.inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
-      headers: { 'x-forwarded-for': uniqueTestIp(email) },
-      payload: { email, password: 'Passw0rd!123', name: 'Bearer User' },
+      headers: {
+        'x-forwarded-for': uniqueTestIp(email),
+        origin: 'http://localhost:5173',
+      },
+      payload: { email, password: 'Passw0rd!123', name: 'Browser User' },
     });
     expect(signUp.statusCode).toBeLessThan(400);
+    expect(authTokenHeader(signUp)).toBeNull();
+    expect(signUp.cookies.some((c) => c.name.includes('session_token'))).toBe(true);
 
-    const token =
-      signUp.headers['set-auth-token'] ??
-      (typeof signUp.headers['set-auth-token'] === 'string'
-        ? signUp.headers['set-auth-token']
-        : undefined);
-    // Fastify may normalize header names; also accept cookie value as fallback token.
-    let bearer =
-      (typeof token === 'string' ? token : Array.isArray(token) ? token[0] : undefined) ?? null;
-    if (!bearer) {
-      const sessionCookie = signUp.cookies.find((c) => c.name.includes('session_token'));
-      bearer = sessionCookie?.value ?? null;
-    }
+    const cookie = signUp.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+    const me = await app.inject({
+      method: 'GET',
+      url: '/api/me',
+      headers: { cookie },
+    });
+    expect(me.statusCode).toBe(200);
+  });
+
+  it('issues set-auth-token only to native Capacitor clients and accepts Bearer', async () => {
+    const email = `native-${randomUUID()}@example.com`;
+    const signUp = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      headers: {
+        'x-forwarded-for': uniqueTestIp(email),
+        'x-client-platform': 'capacitor',
+        origin: 'capacitor://localhost',
+      },
+      payload: { email, password: 'Passw0rd!123', name: 'Native User' },
+    });
+    expect(signUp.statusCode).toBeLessThan(400);
+    const bearer = authTokenHeader(signUp);
     expect(bearer).toBeTruthy();
+
+    const exposed = signUp.headers['access-control-expose-headers'];
+    const exposedText = Array.isArray(exposed) ? exposed.join(',') : String(exposed ?? '');
+    expect(exposedText.toLowerCase()).toContain('set-auth-token');
 
     const me = await app.inject({
       method: 'GET',
@@ -51,5 +78,20 @@ describe('Better Auth bearer session token (Capacitor path)', () => {
     expect(me.statusCode).toBe(200);
     const body = me.json() as { analytics_subject_id: string };
     expect(body.analytics_subject_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('Origin spoof alone does not issue a bearer token', async () => {
+    const email = `spoof-${randomUUID()}@example.com`;
+    const signUp = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      headers: {
+        'x-forwarded-for': uniqueTestIp(email),
+        origin: 'capacitor://localhost',
+      },
+      payload: { email, password: 'Passw0rd!123', name: 'Spoof User' },
+    });
+    expect(signUp.statusCode).toBeLessThan(400);
+    expect(authTokenHeader(signUp)).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ export function ProblemView({
   ux,
   pending,
   submitting,
+  pendingActionId,
   onAssign,
   onDelete,
   onContinue,
@@ -23,6 +24,7 @@ export function ProblemView({
   ux: ProblemUx;
   pending: boolean;
   submitting: boolean;
+  pendingActionId: string | null;
   onAssign: (slot: Slot, tokenId: string) => void;
   onDelete: (slot: Slot) => void;
   onContinue: () => void;
@@ -74,6 +76,11 @@ export function ProblemView({
 
   return (
     <div className="card" data-testid="problem-screen">
+      {pendingActionId && (
+        <span data-testid="pending-action-id" hidden>
+          {pendingActionId}
+        </span>
+      )}
       <button type="button" data-testid="back" onClick={onBack} disabled={submitting}>
         ← Dashboard
       </button>

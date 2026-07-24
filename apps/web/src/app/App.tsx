@@ -8,7 +8,10 @@ import {
   newClientActionId,
 } from '../lib/api/client.js';
 import {
+  clearPendingAction,
   createPendingAction,
+  loadPendingAction,
+  savePendingAction,
   shouldRetainPendingForRetry,
   type PendingAction,
 } from '../lib/api/pending-action.js';
@@ -20,6 +23,14 @@ import { ProblemView } from '../features/problem/ProblemView.js';
 type AuthState = 'loading' | 'anon' | 'authed';
 type UxMode = 'idle' | 'submitting' | 'conflict' | 'retry' | 'offline' | 'fatal';
 
+function retainPending(action: PendingAction): void {
+  savePendingAction(action);
+}
+
+function dropPending(): void {
+  clearPendingAction();
+}
+
 export function App(): React.JSX.Element {
   const [auth, setAuth] = useState<AuthState>('loading');
   const [session, setSession] = useState<PublicSession | null>(null);
@@ -30,6 +41,22 @@ export function App(): React.JSX.Element {
   const sessionRef = useRef<PublicSession | null>(null);
   sessionRef.current = session;
 
+  const applyRestoredPending = useCallback((sessionId: string): PendingAction | null => {
+    const stored = loadPendingAction();
+    if (stored && stored.session_id === sessionId) {
+      setPending(stored);
+      setUx('retry');
+      setBanner('Unsent action found. Tap Retry to resend the same action.');
+      return stored;
+    }
+    if (stored && stored.session_id !== sessionId) {
+      clearPendingAction();
+    }
+    setPending(null);
+    setUx('idle');
+    return null;
+  }, []);
+
   const refreshAuth = useCallback(async () => {
     try {
       await initApiClient();
@@ -38,6 +65,8 @@ export function App(): React.JSX.Element {
     } catch {
       setAuth('anon');
       setSession(null);
+      dropPending();
+      setPending(null);
     }
   }, []);
 
@@ -47,15 +76,20 @@ export function App(): React.JSX.Element {
 
   useEffect(() => subscribeOnlineStatus(setOnline), []);
 
-  const openSession = useCallback(async (sessionId: string): Promise<void> => {
-    const s = await api.getSession(sessionId);
-    setSession(s);
-    setBanner(s.message);
-    setPending(null);
-    setUx('idle');
-  }, []);
+  const openSession = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const s = await api.getSession(sessionId);
+      setSession(s);
+      const restored = applyRestoredPending(sessionId);
+      if (!restored) {
+        setBanner(s.message);
+      }
+    },
+    [applyRestoredPending],
+  );
 
-  // App lifecycle / tab resume: reload authoritative server state (AC-049).
+  // App lifecycle / tab resume: reload authoritative server state (AC-049),
+  // then re-attach any persisted pending action for exactly-once retry.
   useEffect(() => {
     if (auth !== 'authed') return;
     return subscribeAppResume(() => {
@@ -65,13 +99,14 @@ export function App(): React.JSX.Element {
         .getSession(current.session_id)
         .then((s) => {
           setSession(s);
-          if (s.message) setBanner(s.message);
+          const restored = applyRestoredPending(s.session_id);
+          if (!restored && s.message) setBanner(s.message);
         })
         .catch(() => {
           // Keep local presentation; next user action will reconcile.
         });
     });
-  }, [auth]);
+  }, [auth, applyRestoredPending]);
 
   useEffect(() => {
     if (!online && pending) {
@@ -82,7 +117,7 @@ export function App(): React.JSX.Element {
 
   /**
    * Submit a structured action. Semantic validity is decided only by the server
-   * (PB-039 / AC-050). Network loss retains `client_action_id` for Retry (AC-048).
+   * (PB-039 / AC-050). Network loss persists `client_action_id` for Retry (AC-048).
    * Conflict responses replace local state with authoritative `current_state`.
    */
   async function sendAction(action: PendingAction): Promise<void> {
@@ -91,15 +126,24 @@ export function App(): React.JSX.Element {
     setUx('submitting');
     setBanner(null);
     setPending(action);
+    // Persist before the request so refresh/restart keeps the same client_action_id.
+    retainPending(action);
     try {
-      const updated = await api.submitAction(current.session_id, action);
+      const updated = await api.submitAction(current.session_id, {
+        client_action_id: action.client_action_id,
+        expected_state_version: action.expected_state_version,
+        action_type: action.action_type,
+        payload: action.payload,
+      });
       setSession(updated);
+      dropPending();
       setPending(null);
       setUx('idle');
       if (updated.message) setBanner(updated.message);
     } catch (err) {
       if (err instanceof ApiRequestError && err.currentState) {
         setSession(err.currentState);
+        dropPending();
         setPending(null);
         setUx('conflict');
         setBanner(err.body.message);
@@ -111,6 +155,7 @@ export function App(): React.JSX.Element {
           setBanner('Server error. Tap Retry to resend the same action.');
           return;
         }
+        dropPending();
         setPending(null);
         setUx('fatal');
         setBanner(err.body.message);
@@ -121,6 +166,7 @@ export function App(): React.JSX.Element {
         setBanner('Network error. Tap Retry to resend the same action.');
         return;
       }
+      dropPending();
       setPending(null);
       setUx('fatal');
       setBanner('Unexpected error. Reload from server.');
@@ -130,6 +176,7 @@ export function App(): React.JSX.Element {
   async function submit(actionType: ActionType, payload: ActionPayload): Promise<void> {
     if (!session || pending || ux === 'submitting') return;
     const action = createPendingAction(
+      session.session_id,
       actionType,
       payload,
       session.state_version,
@@ -145,6 +192,7 @@ export function App(): React.JSX.Element {
 
   async function logout(): Promise<void> {
     await api.signOut();
+    dropPending();
     setSession(null);
     setPending(null);
     setBanner(null);
@@ -185,6 +233,7 @@ export function App(): React.JSX.Element {
           ux={ux}
           pending={pending !== null}
           submitting={ux === 'submitting'}
+          pendingActionId={pending?.client_action_id ?? null}
           onAssign={(slot: Slot, tokenId: string) =>
             void submit('ASSIGN_SLOT', { slot, token_id: tokenId })
           }
@@ -196,9 +245,11 @@ export function App(): React.JSX.Element {
           onReload={() => void openSession(session.session_id)}
           onBack={() => {
             setSession(null);
-            setPending(null);
+            // Keep persisted pending so Resume can retry after leaving the screen.
+            const stored = loadPendingAction();
+            setPending(stored && stored.session_id === session.session_id ? stored : null);
             setBanner(null);
-            setUx('idle');
+            setUx(stored ? 'retry' : 'idle');
           }}
         />
       )}

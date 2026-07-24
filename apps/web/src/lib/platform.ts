@@ -1,12 +1,18 @@
+import { KeychainAccess, SecureStorage } from '@aparajita/capacitor-secure-storage';
+import { apiBaseUrlForRuntime, viteModeToRuntime, type ClientRuntimeMode } from './api-base-url.js';
+
+/** Header native Capacitor clients send so the API may issue bearer tokens. */
+export const NATIVE_CLIENT_HEADER = 'X-Client-Platform';
+export const NATIVE_CLIENT_VALUE = 'capacitor';
+
 /**
  * Thin Capacitor/platform helpers. Semantic validity is never decided here —
- * these only handle native packaging concerns (auth token storage, connectivity,
- * app lifecycle resume) per ARCHITECTURE §17.
+ * these only handle native packaging concerns (secure auth token storage,
+ * connectivity, app lifecycle resume) per ARCHITECTURE §17.
  */
 
 export function isNativePlatform(): boolean {
   try {
-    // Dynamic access so the web build does not require Capacitor at runtime.
     const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
       .Capacitor;
     return cap?.isNativePlatform?.() === true;
@@ -15,20 +21,40 @@ export function isNativePlatform(): boolean {
   }
 }
 
-/** API origin for native WebViews; empty string keeps relative URLs in the browser. */
-export function apiBaseUrl(): string {
-  const fromEnv = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? '';
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
-  return '';
+function runtimeMode(): ClientRuntimeMode {
+  return viteModeToRuntime(import.meta.env.MODE, import.meta.env.PROD);
 }
 
-const AUTH_TOKEN_KEY = 'reasoning_tutor_auth_token';
+/** API origin: empty in browser; validated absolute URL on native only. */
+export function apiBaseUrl(): string {
+  return apiBaseUrlForRuntime({
+    isNative: isNativePlatform(),
+    viteApiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+    mode: runtimeMode(),
+  });
+}
+
+const AUTH_TOKEN_KEY = 'auth_token';
+
+let secureReady: Promise<void> | null = null;
+
+async function ensureSecureStorage(): Promise<void> {
+  if (!secureReady) {
+    secureReady = (async () => {
+      await SecureStorage.setKeyPrefix('reasoning_tutor_');
+      await SecureStorage.setSynchronize(false);
+      // Device-local keychain item — does not migrate via iCloud/encrypted backups.
+      await SecureStorage.setDefaultKeychainAccess(KeychainAccess.whenUnlockedThisDeviceOnly);
+    })();
+  }
+  await secureReady;
+}
 
 export async function loadStoredAuthToken(): Promise<string | null> {
   if (!isNativePlatform()) return null;
   try {
-    const { Preferences } = await import('@capacitor/preferences');
-    const { value } = await Preferences.get({ key: AUTH_TOKEN_KEY });
+    await ensureSecureStorage();
+    const value = await SecureStorage.getItem(AUTH_TOKEN_KEY);
     return value;
   } catch {
     return null;
@@ -37,19 +63,15 @@ export async function loadStoredAuthToken(): Promise<string | null> {
 
 export async function storeAuthToken(token: string): Promise<void> {
   if (!isNativePlatform()) return;
-  try {
-    const { Preferences } = await import('@capacitor/preferences');
-    await Preferences.set({ key: AUTH_TOKEN_KEY, value: token });
-  } catch {
-    // Preferences unavailable in plain browser tests — ignore.
-  }
+  await ensureSecureStorage();
+  await SecureStorage.setItem(AUTH_TOKEN_KEY, token);
 }
 
 export async function clearStoredAuthToken(): Promise<void> {
   if (!isNativePlatform()) return;
   try {
-    const { Preferences } = await import('@capacitor/preferences');
-    await Preferences.remove({ key: AUTH_TOKEN_KEY });
+    await ensureSecureStorage();
+    await SecureStorage.removeItem(AUTH_TOKEN_KEY);
   } catch {
     // ignore
   }

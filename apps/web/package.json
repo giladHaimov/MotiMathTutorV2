@@ -12,11 +12,11 @@
     "cap:ios": "npx cap open ios"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^7.1.6",
     "@app/contracts": "*",
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.6.8",
     "@capacitor/network": "^7.0.4",
-    "@capacitor/preferences": "^7.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

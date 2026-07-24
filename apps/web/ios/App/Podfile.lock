@@ -1,4 +1,7 @@
 PODS:
+  - AparajitaCapacitorSecureStorage (7.1.6):
+    - Capacitor
+    - KeychainSwift (~> 21.0)
   - Capacitor (7.6.8):
     - CapacitorCordova
   - CapacitorApp (7.1.2):
@@ -6,17 +9,22 @@ PODS:
   - CapacitorCordova (7.6.8)
   - CapacitorNetwork (7.0.4):
     - Capacitor
-  - CapacitorPreferences (7.0.4):
-    - Capacitor
+  - KeychainSwift (21.0.0)
 
 DEPENDENCIES:
+  - "AparajitaCapacitorSecureStorage (from `../../../../node_modules/@aparajita/capacitor-secure-storage`)"
   - "Capacitor (from `../../../../node_modules/@capacitor/ios`)"
   - "CapacitorApp (from `../../../../node_modules/@capacitor/app`)"
   - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
   - "CapacitorNetwork (from `../../../../node_modules/@capacitor/network`)"
-  - "CapacitorPreferences (from `../../../../node_modules/@capacitor/preferences`)"
+
+SPEC REPOS:
+  trunk:
+    - KeychainSwift
 
 EXTERNAL SOURCES:
+  AparajitaCapacitorSecureStorage:
+    :path: "../../../../node_modules/@aparajita/capacitor-secure-storage"
   Capacitor:
     :path: "../../../../node_modules/@capacitor/ios"
   CapacitorApp:
@@ -25,16 +33,15 @@ EXTERNAL SOURCES:
     :path: "../../../../node_modules/@capacitor/ios"
   CapacitorNetwork:
     :path: "../../../../node_modules/@capacitor/network"
-  CapacitorPreferences:
-    :path: "../../../../node_modules/@capacitor/preferences"
 
 SPEC CHECKSUMS:
+  AparajitaCapacitorSecureStorage: 502bff73187cf9d0164459458ccf47ec65d5895a
   Capacitor: ff6bf01336ac353098378828aff465095a89e459
   CapacitorApp: f01a913211780e0718dae9750442c3e23f96e106
   CapacitorCordova: e61ee8c40101b8cd011d0224261606a290c082cf
   CapacitorNetwork: b719d692a8d1310da8d26d6648d3aa1ef1e100e1
-  CapacitorPreferences: 69d9991307507aeab8ef8019c10b9babfda0e9ca
+  KeychainSwift: 4a71a45c802fd9e73906457c2dcbdbdc06c9419d
 
-PODFILE CHECKSUM: 81a597a01e3501b42327fdbc80e86e9cf3d532de
+PODFILE CHECKSUM: 16dcffb8501c7d978ad884481c9bbb5494080788
 
 COCOAPODS: 1.17.0

@@ -1,7 +1,10 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** Absolute API origin for Capacitor native builds; empty in browser. */
+  /**
+   * Native Capacitor builds only. Browser must leave unset (same-origin).
+   * Production native requires https://; http:// only in development/test.
+   */
   readonly VITE_API_BASE_URL?: string;
 }
 
