@@ -1,0 +1,24 @@
+1. Chatgpt: share Product Book <Prompt: Chatgpt-create-md-design-docs>
+  out-docs:
+      PRODUCT.md
+      ARCHITECTURE.md
+      ACCEPTANCE.md
+      AGENTS.md
+      and Slices/ files
+
+
+2. CC develops one-slice-at-the-time    <Prompt: CC-create-single-slice-and-test-after>
+    After each slice:
+        - Codex short review    <Prompt: Codex-code-review-after-single-slice-completed>
+        - CC fixes findings     <Prompt: CC-fix-single-slice-review-findings-if-any.txt>
+
+
+3. After Slice-1 == FirstSlice : deeper review   <Prompt: Codex-deep-review-after-slice-1-completed>
+
+
+4. When all slices are done: Full Acceptance Audit by Codex against prod book   <Prompt: Codex-full-acceptance-test>
+
+
+5. Human test and Release
+
+--eof

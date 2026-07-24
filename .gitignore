@@ -1,0 +1,102 @@
+# macOS / Windows
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+*.swp
+*.swo
+*~
+
+# Node / TypeScript
+node_modules/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.npm/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Logs and runtime
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.pid.lock
+
+# Build output
+build/
+dist/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+coverage/
+.nyc_output/
+.cache/
+.turbo/
+.vite/
+
+# Tests
+playwright-report/
+test-results/
+blob-report/
+allure-results/
+
+# Local databases and temp data
+*.sqlite
+*.sqlite3
+*.db
+.tmp/
+tmp/
+temp/
+
+# Docker/local volumes
+.docker-data/
+docker-data/
+volumes/
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Capacitor / Android generated files
+android/.gradle/
+android/local.properties
+android/**/build/
+android/captures/
+*.jks
+*.keystore
+
+# Capacitor / iOS generated files
+ios/App/Pods/
+ios/App/DerivedData/
+ios/App/*.xcworkspace/xcuserdata/
+ios/App/*.xcodeproj/xcuserdata/
+DerivedData/
+
+# Archives and local release artifacts
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+artifacts/

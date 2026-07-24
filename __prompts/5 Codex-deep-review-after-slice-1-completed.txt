@@ -1,0 +1,12 @@
+Perform a deep Slice-1 audit. Prove:
+- real authentication/authorization and cross-user isolation;
+- real PostgreSQL, clean migrations and write → restart → read;
+- one real core product journey end-to-end;
+- duplicate/stale actions handled safely where relevant;
+- session state and event persist atomically;
+- no hidden-content, in-memory or fake path;
+- realistic E2E without API/DB mocks;
+- clean Docker build/start;
+- CI/invariant tests were not weakened.
+
+Return PASS/BLOCK plus actionable findings. Do not modify production code.

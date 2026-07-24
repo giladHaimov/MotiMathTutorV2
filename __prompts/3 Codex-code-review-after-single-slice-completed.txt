@@ -1,0 +1,5 @@
+Review the Slice commit/diff against [SLICE_FILE], PRODUCT.md, ARCHITECTURE.md and ACCEPTANCE.md.
+
+Check PB/AC coverage, bugs, scope drift, auth/authorization, real DB use, table/flow consistency, tests, container impact, TODO/mock/stub paths, and any weakened/skipped verification. Run relevant tests.
+
+Return only BLOCKING or IMPORTANT findings with exact files, evidence and remediation. Do not modify production code.
