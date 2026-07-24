@@ -10,6 +10,10 @@ import * as authSchema from '../db/schema/auth-schema.js';
  * `npm run auth:generate` writes `db/schema/auth-schema.ts`. Custom model names
  * (below) map those tables to `auth_users/auth_sessions/auth_accounts/
  * auth_verifications` (ARCHITECTURE §9.1–9.4) and MUST be set before generating.
+ *
+ * Rate limiting uses Better Auth defaults (including the 3/10s special rule for
+ * sign-up/sign-in). Tests must not weaken these limits — E2E/integration isolate
+ * clients with unique `X-Forwarded-For` values instead.
  */
 const config = getConfig();
 
@@ -35,17 +39,6 @@ export const auth = betterAuth({
   advanced: {
     // Resolve the client IP from the proxy header for per-IP auth rate limiting.
     ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
-  },
-  // Explicit limits: Playwright/CI share one fallback bucket when no client IP is
-  // forwarded (Better Auth warning). Default special rules throttle sign-up/sign-in
-  // to 3/10s which breaks the multi-scenario acceptance suite on a shared bucket.
-  rateLimit: {
-    window: 60,
-    max: 200,
-    customRules: {
-      '/sign-up/email': { window: 60, max: 50 },
-      '/sign-in/email': { window: 60, max: 50 },
-    },
   },
   // Better Auth generates its own string IDs (the auth_* PKs have no DB default).
 });

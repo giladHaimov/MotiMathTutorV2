@@ -5,9 +5,8 @@ import { slotSchema } from '@app/contracts';
  * Canonical problem-fixture schema (ARCHITECTURE §12). Fixtures are validated
  * before import (AC-008) and become immutable versioned content (PB-034).
  *
- * NOTE: The full shape is authored for every canonical example so it validates
- * and imports, but Slice 01 only exercises the `definition.assignable` +
- * `workspace_slots` path through the pure engine.
+ * Gate/content integrity rejects fixtures that can skip, duplicate, suppress, or
+ * deadlock progressive reveal (Slice 02).
  */
 
 export const DOMAINS = ['PERCENT', 'RATIO', 'FRACTION'] as const;
@@ -58,7 +57,6 @@ export const definitionSchema = z
   .object({
     workspace_slots: z.array(slotSchema).min(1),
     assignable: z.array(assignableSchema),
-    // Forward-looking fields (later slices); present so canonical content is complete.
     invalid_assignments: z.array(invalidAssignmentSchema).default([]),
     gates: z
       .array(
@@ -120,8 +118,8 @@ export const problemFixtureSchema = z
         chunks: z.array(chunkSchema).min(1),
       })
       .strict()
-      // Every assignable/token reference must point at a real, ordered chunk token.
       .superRefine((problem, ctx) => {
+        const lastChunkIndex = problem.chunks.length - 1;
         const orderIndexes = problem.chunks.map((c) => c.order_index).sort((a, b) => a - b);
         orderIndexes.forEach((idx, i) => {
           if (idx !== i) {
@@ -131,18 +129,131 @@ export const problemFixtureSchema = z
             });
           }
         });
-        const tokenIds = new Set(problem.chunks.flatMap((c) => c.tokens.map((t) => t.token_id)));
+
+        // Unique token IDs across chunks.
+        const tokenChunkIndex = new Map<string, number>();
+        for (const chunk of problem.chunks) {
+          for (const token of chunk.tokens) {
+            if (tokenChunkIndex.has(token.token_id)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `duplicate token_id ${token.token_id} across chunks`,
+              });
+            } else {
+              tokenChunkIndex.set(token.token_id, chunk.order_index);
+            }
+          }
+        }
+
+        // Unique assignable token IDs and unique assignable slot IDs.
+        const assignableTokenIds = new Set<string>();
+        const assignableSlots = new Set<string>();
         for (const a of problem.definition.assignable) {
-          if (!tokenIds.has(a.token_id)) {
+          if (assignableTokenIds.has(a.token_id)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `duplicate assignable token_id ${a.token_id}`,
+            });
+          }
+          assignableTokenIds.add(a.token_id);
+
+          if (assignableSlots.has(a.slot)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `duplicate assignable slot ${a.slot}`,
+            });
+          }
+          assignableSlots.add(a.slot);
+
+          if (!tokenChunkIndex.has(a.token_id)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               message: `assignable token_id ${a.token_id} is not defined in any chunk`,
             });
+            continue;
           }
-          if (a.requires_revealed_chunk_index > problem.chunks.length - 1) {
+          if (a.requires_revealed_chunk_index > lastChunkIndex) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               message: `assignable ${a.token_id} requires a chunk index beyond the problem`,
+            });
+          }
+          // Reveal requirement must match the chunk that actually owns the token.
+          const tokenChunk = tokenChunkIndex.get(a.token_id)!;
+          if (a.requires_revealed_chunk_index !== tokenChunk) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `assignable ${a.token_id} requires_revealed_chunk_index ${a.requires_revealed_chunk_index} must equal token chunk ${tokenChunk}`,
+            });
+          }
+        }
+
+        const gates = problem.definition.gates;
+        const revealIndexes = gates.map((g) => g.reveals_chunk_index);
+        const commitmentIds = gates.map((g) => g.requires_commitment);
+
+        // Unique commitment IDs.
+        const seenCommitments = new Set<string>();
+        for (const code of commitmentIds) {
+          if (seenCommitments.has(code)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `duplicate gate commitment ${code}`,
+            });
+          }
+          seenCommitments.add(code);
+        }
+
+        // Unique reveal indices; each within valid chunk bounds (1..last).
+        const seenReveals = new Set<number>();
+        for (const reveal of revealIndexes) {
+          if (reveal > lastChunkIndex) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `gate reveals_chunk_index ${reveal} is beyond last chunk index ${lastChunkIndex}`,
+            });
+          }
+          if (seenReveals.has(reveal)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `duplicate gate reveals_chunk_index ${reveal}`,
+            });
+          }
+          seenReveals.add(reveal);
+        }
+
+        // Contiguous reveal progression 1..lastChunkIndex — no skip/suppress/deadlock.
+        // With only commitment-gated reveal, every intermediate chunk must be gated.
+        if (lastChunkIndex >= 1) {
+          const expected = Array.from({ length: lastChunkIndex }, (_, i) => i + 1);
+          const sorted = [...revealIndexes].sort((a, b) => a - b);
+          const matches =
+            sorted.length === expected.length && sorted.every((v, i) => v === expected[i]);
+          if (!matches) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `gates must reveal chunks contiguously as ${expected.join(',')}; found ${sorted.join(',') || '(none)'}`,
+            });
+          }
+        } else if (gates.length > 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'single-chunk problems must not define reveal gates',
+          });
+        }
+
+        // Each gate commitment references a valid assignable at the prior chunk
+        // (position-derived prerequisite): gate revealing K needs ≥1 assignable
+        // with requires_revealed_chunk_index === K-1. Otherwise the gate deadlocks.
+        for (const gate of gates) {
+          const prerequisiteIndex = gate.reveals_chunk_index - 1;
+          const hasAssignable = problem.definition.assignable.some(
+            (a) => a.requires_revealed_chunk_index === prerequisiteIndex,
+          );
+          if (!hasAssignable) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `gate commitment ${gate.requires_commitment} revealing chunk ${gate.reveals_chunk_index} has no assignable at chunk ${prerequisiteIndex}`,
             });
           }
         }

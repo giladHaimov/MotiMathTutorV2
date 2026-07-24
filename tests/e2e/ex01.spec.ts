@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 
 async function register(page: Page, label: string): Promise<void> {
   await page.goto('/');
