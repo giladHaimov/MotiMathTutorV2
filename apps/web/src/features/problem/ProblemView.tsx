@@ -174,6 +174,11 @@ export function ProblemView({
           {banner}
         </p>
       )}
+      {session.guidance_code && (
+        <p className="guidance" data-testid="guidance-code">
+          {session.guidance_code}
+        </p>
+      )}
       <button type="button" data-testid="reload" onClick={onReload}>
         Reload from server
       </button>

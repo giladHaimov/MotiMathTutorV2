@@ -4,6 +4,8 @@ import type {
   EngineGate,
   EngineProblemDefinition,
   EngineResult,
+  EngineRollbackRecord,
+  EngineRollbackRule,
   EngineSessionState,
   EngineSufficiencyDependency,
   PendingAcknowledgment,
@@ -12,12 +14,20 @@ import type {
 
 export * from './types.js';
 
+/** Safe client messages for fixture guidance codes (never hidden content). */
+const GUIDANCE_MESSAGES: Record<string, string> = {
+  GUIDE_DELETE_CONFLICT:
+    'Repeated conflicting assignment. Delete conflicts and rebuild from the earlier stage.',
+};
+
 /**
  * Pure reasoning engine (ARCHITECTURE §8).
  *
  * Slice 02: typed workspace + progressive reveal + final answer.
  * Slice 03: data-driven semantic sufficiency, premature quantification,
  * ACKNOWLEDGE_INSUFFICIENT_INFORMATION, and invalid-assignment misconceptions.
+ * Slice 04: occupied-slot conflict classification, misconception repetition,
+ * and deterministic fixture-defined rollback.
  *
  * Deterministic; no I/O.
  */
@@ -25,8 +35,14 @@ export function applyAction(input: {
   problemDefinition: EngineProblemDefinition;
   sessionState: EngineSessionState;
   action: EngineAction;
+  /**
+   * Counts of prior completed REJECTED attempts for this session, keyed by
+   * misconception_code. The current attempt is not included; the engine adds 1.
+   */
+  priorMisconceptionCounts?: Record<string, number>;
 }): EngineResult {
   const { problemDefinition, sessionState, action } = input;
+  const priorCounts = input.priorMisconceptionCounts ?? {};
 
   if (sessionState.status !== 'ACTIVE') {
     return rejectFrom(sessionState, action, 'This session is no longer active.');
@@ -39,23 +55,38 @@ export function applyAction(input: {
     action.action_type !== 'DELETE_ASSIGNMENT'
   ) {
     const pending = sessionState.workspace.pending_acknowledgment;
-    return rejectFrom(sessionState, action, pending.message, pending.misconception_code);
+    return finalizeReject(
+      rejectFrom(sessionState, action, pending.message, pending.misconception_code),
+      problemDefinition,
+      priorCounts,
+    );
   }
 
+  let result: EngineResult;
   switch (action.action_type) {
     case 'ASSIGN_SLOT':
-      return assignSlot(problemDefinition, sessionState, action);
+      result = assignSlot(problemDefinition, sessionState, action);
+      break;
     case 'DELETE_ASSIGNMENT':
-      return deleteAssignment(sessionState, action);
+      result = deleteAssignment(sessionState, action);
+      break;
     case 'SUBMIT_COMMITMENT':
-      return submitCommitment(problemDefinition, sessionState, action);
+      result = submitCommitment(problemDefinition, sessionState, action);
+      break;
     case 'SUBMIT_FINAL_ANSWER':
-      return submitFinalAnswer(problemDefinition, sessionState, action);
+      result = submitFinalAnswer(problemDefinition, sessionState, action);
+      break;
     case 'ACKNOWLEDGE_INSUFFICIENT_INFORMATION':
-      return acknowledgeInsufficient(sessionState, action);
+      result = acknowledgeInsufficient(sessionState, action);
+      break;
     default:
-      return rejectFrom(sessionState, action, 'Unsupported action.');
+      result = rejectFrom(sessionState, action, 'Unsupported action.');
   }
+
+  if (result.outcome === 'REJECTED') {
+    return finalizeReject(result, problemDefinition, priorCounts);
+  }
+  return withNoRollback(result);
 }
 
 /** Actions the client may offer for the current durable state (server truth). */
@@ -158,7 +189,12 @@ function assignSlot(
   const target = state.workspace.slots.find((s) => s.slot === slot);
   if (target && target.token_id !== null) {
     // Occupied-slot conflict: explicit deletion required (PB-007 / AC-026).
-    return rejectFrom(state, action, 'That slot is already occupied. Delete it first.');
+    return rejectFrom(
+      state,
+      action,
+      'That slot is already occupied. Delete it first.',
+      'CONFLICTING_SLOT_ASSIGNMENT',
+    );
   }
 
   const workspace = cloneWorkspace(state.workspace);
@@ -184,6 +220,8 @@ function assignSlot(
     ],
     misconception_code: null,
     message: null,
+    guidance_code: null,
+    rollback: null,
   };
 }
 
@@ -217,6 +255,8 @@ function deleteAssignment(state: EngineSessionState, action: EngineAction): Engi
     ],
     misconception_code: null,
     message: null,
+    guidance_code: null,
+    rollback: null,
   };
 }
 
@@ -261,6 +301,8 @@ function submitCommitment(
     ],
     misconception_code: null,
     message: null,
+    guidance_code: null,
+    rollback: null,
   };
 }
 
@@ -301,6 +343,8 @@ function submitFinalAnswer(
       ],
       misconception_code: null,
       message: 'That answer is not correct. The session is not complete.',
+      guidance_code: null,
+      rollback: null,
     };
   }
 
@@ -321,6 +365,8 @@ function submitFinalAnswer(
     ],
     misconception_code: null,
     message: null,
+    guidance_code: null,
+    rollback: null,
   };
 }
 
@@ -349,6 +395,8 @@ function acknowledgeInsufficient(state: EngineSessionState, action: EngineAction
     ],
     misconception_code: null,
     message: null,
+    guidance_code: null,
+    rollback: null,
   };
 }
 
@@ -419,6 +467,126 @@ function rejectPremature(
     ],
     misconception_code: dep.misconception_code,
     message: dep.message,
+    guidance_code: null,
+    rollback: null,
+  };
+}
+
+/**
+ * When a classified reject matches a fixture rollback rule at the current
+ * repeat count, roll the durable state back and attach a rollback record
+ * (PB-011–014, AC-031/039).
+ */
+function finalizeReject(
+  result: EngineResult,
+  def: EngineProblemDefinition,
+  priorCounts: Record<string, number>,
+): EngineResult {
+  if (!result.misconception_code) {
+    return withNoRollback(result);
+  }
+
+  const repeatCount = (priorCounts[result.misconception_code] ?? 0) + 1;
+  const rule = selectRollbackRule(def.rollback_rules, result.misconception_code, repeatCount);
+  if (!rule) {
+    return withNoRollback(result);
+  }
+
+  const fromChunk = result.nextState.current_chunk_index;
+  const toChunk = Math.max(0, fromChunk - rule.rollback_depth);
+  const nextState = applyRollbackTransition(def, result.nextState, toChunk);
+  const guidanceMessage =
+    GUIDANCE_MESSAGES[rule.guidance_code] ??
+    `Rollback guidance: ${rule.guidance_code}. Rebuild from the earlier stage.`;
+
+  const rollback: EngineRollbackRecord = {
+    misconception_code: result.misconception_code,
+    from_chunk_index: fromChunk,
+    to_chunk_index: toChunk,
+    rollback_depth: rule.rollback_depth,
+    repeat_count: repeatCount,
+    guidance_code: rule.guidance_code,
+  };
+
+  return {
+    outcome: 'REJECTED',
+    nextState,
+    events: [
+      ...result.events,
+      {
+        event_type: 'ROLLBACK_APPLIED',
+        chunk_index: toChunk,
+        misconception_code: result.misconception_code,
+        payload: {
+          misconception_code: result.misconception_code,
+          from_chunk_index: fromChunk,
+          to_chunk_index: toChunk,
+          rollback_depth: rule.rollback_depth,
+          repeat_count: repeatCount,
+          guidance_code: rule.guidance_code,
+        },
+      },
+    ],
+    misconception_code: result.misconception_code,
+    message: guidanceMessage,
+    guidance_code: rule.guidance_code,
+    rollback,
+  };
+}
+
+/** Highest matching `repeat_from` at or below the current repeat count. */
+export function selectRollbackRule(
+  rules: EngineRollbackRule[],
+  misconceptionCode: string,
+  repeatCount: number,
+): EngineRollbackRule | null {
+  let best: EngineRollbackRule | null = null;
+  for (const rule of rules) {
+    if (rule.misconception_code !== misconceptionCode) continue;
+    if (rule.repeat_from > repeatCount) continue;
+    if (!best || rule.repeat_from > best.repeat_from) {
+      best = rule;
+    }
+  }
+  return best;
+}
+
+/**
+ * Deterministic rollback transition: retreat reveal, drop later commitments,
+ * clear slots that required later chunks, clear pending acknowledgment.
+ */
+export function applyRollbackTransition(
+  def: EngineProblemDefinition,
+  state: EngineSessionState,
+  toChunkIndex: number,
+): EngineSessionState {
+  const keptCommitments = state.accepted_commitments.filter((commitment) => {
+    const gate = def.gates.find((g) => g.requires_commitment === commitment);
+    if (!gate) return false;
+    return gate.reveals_chunk_index <= toChunkIndex;
+  });
+
+  const workspace = cloneWorkspace(state.workspace);
+  workspace.pending_acknowledgment = null;
+  for (const slot of workspace.slots) {
+    const assignable = def.assignable.find(
+      (a) => a.slot === slot.slot && a.token_id === slot.token_id,
+    );
+    if (
+      slot.token_id !== null &&
+      assignable &&
+      assignable.requires_revealed_chunk_index > toChunkIndex
+    ) {
+      slot.token_id = null;
+      slot.label = null;
+    }
+  }
+
+  return {
+    ...state,
+    current_chunk_index: toChunkIndex,
+    accepted_commitments: keptCommitments,
+    workspace,
   };
 }
 
@@ -485,6 +653,14 @@ function normalizeAnswer(value: string): string {
   return trimmed;
 }
 
+function withNoRollback(result: EngineResult): EngineResult {
+  return {
+    ...result,
+    guidance_code: result.guidance_code ?? null,
+    rollback: null,
+  };
+}
+
 function rejectFrom(
   state: EngineSessionState,
   action: EngineAction,
@@ -507,5 +683,7 @@ function rejectFrom(
     ],
     misconception_code: misconception,
     message,
+    guidance_code: null,
+    rollback: null,
   };
 }

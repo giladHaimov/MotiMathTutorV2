@@ -41,6 +41,7 @@ const problemDefinition: EngineProblemDefinition = {
   ],
   completion_rule: { requires_slots_filled: ['WHOLE', 'PART_IN_PERCENTAGE', 'UNKNOWN'] },
   expected_final_result: { value: '12', unit: 'students' },
+  rollback_rules: [],
 };
 
 const baseInput: SerializeInput = {
