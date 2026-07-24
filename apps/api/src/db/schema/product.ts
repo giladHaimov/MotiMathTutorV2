@@ -171,6 +171,12 @@ export const learningSessions = pgTable(
       t.updatedAt.desc(),
     ),
     index('learning_sessions_problem_status_idx').on(t.problemId, t.status),
+    // At most one ACTIVE session per subject, enforced at the database level so
+    // concurrent requests/tabs/devices/instances cannot create duplicates
+    // (ARCHITECTURE §8; startSession relies on this via ON CONFLICT DO NOTHING).
+    uniqueIndex('learning_sessions_one_active_per_subject_uq')
+      .on(t.analyticsSubjectId)
+      .where(sql`${t.status} = 'ACTIVE'`),
     check('learning_sessions_status_chk', sql`${t.status} in ('ACTIVE','COMPLETED','ABANDONED')`),
     check('learning_sessions_state_version_chk', sql`${t.stateVersion} >= 0`),
     check('learning_sessions_chunk_chk', sql`${t.currentChunkIndex} >= 0`),

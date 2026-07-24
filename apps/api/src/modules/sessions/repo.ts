@@ -1,4 +1,4 @@
-import { and, asc, eq, notInArray } from 'drizzle-orm';
+import { and, asc, desc, eq, notInArray } from 'drizzle-orm';
 import type { Slot } from '@app/contracts';
 import type { WorkspaceState } from '@app/engine';
 import type { ProblemDefinitionFixture } from '@app/problem-content';
@@ -58,6 +58,30 @@ export async function pickNextProblem(db: Db, subjectId: string): Promise<Select
     definition: row.definition as ProblemDefinitionFixture,
     contentVersion: row.contentVersion,
   };
+}
+
+/**
+ * The subject's current ACTIVE session id, if any. Used both as the fast-path
+ * "resume, don't create" check and — after losing the startSession insert race
+ * to `learning_sessions_one_active_per_subject_uq` — to find the concurrent
+ * winner's row (ARCHITECTURE §8).
+ */
+export async function findActiveSessionId(
+  exec: Executor,
+  subjectId: string,
+): Promise<string | null> {
+  const rows = await exec
+    .select({ id: learningSessions.id })
+    .from(learningSessions)
+    .where(
+      and(
+        eq(learningSessions.analyticsSubjectId, subjectId),
+        eq(learningSessions.status, 'ACTIVE'),
+      ),
+    )
+    .orderBy(desc(learningSessions.updatedAt))
+    .limit(1);
+  return rows[0]?.id ?? null;
 }
 
 /** Load ordered chunk rows for serialization (tokens live in semantic_definition). */

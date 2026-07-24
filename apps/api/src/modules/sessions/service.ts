@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { ActionRequest, PublicSession } from '@app/contracts';
 import { applyAction, type EngineProblemDefinition, type EngineSessionState } from '@app/engine';
 import { toEngineProblemDefinition, type ProblemDefinitionFixture } from '@app/problem-content';
@@ -15,7 +15,13 @@ import {
 import { ApiError } from '../../http/errors.js';
 import type { Profile } from '../profile/service.js';
 import { buildPublicSession } from './serializer.js';
-import { initialWorkspace, loadChunkRows, normalizeWorkspace, pickNextProblem } from './repo.js';
+import {
+  findActiveSessionId,
+  initialWorkspace,
+  loadChunkRows,
+  normalizeWorkspace,
+  pickNextProblem,
+} from './repo.js';
 import { runPostAcceptWriteHook } from './test-hooks.js';
 
 export type SubmitOutcome =
@@ -28,26 +34,24 @@ export type SubmitOutcome =
  * exists it is returned instead of creating a duplicate; otherwise the next
  * deterministic problem is started, pinned to engine + content versions
  * (AC-010), returning only the first permitted chunk (AC-011).
+ *
+ * Race safety: concurrent callers (double-tap, multiple tabs/devices, or two
+ * API instances behind a load balancer) must converge on exactly one ACTIVE
+ * session. A plain SELECT-then-INSERT is not a concurrency boundary — two
+ * callers can both pass the SELECT before either commits. Instead the insert
+ * itself is the boundary: it targets `learning_sessions_one_active_per_subject_uq`
+ * (a DB-level partial unique index — see db/migrations) via `ON CONFLICT ...
+ * DO NOTHING`. A caller that loses the race gets zero rows back from the
+ * insert and re-reads the row the winner committed, rather than erroring.
  */
 export async function startSession(
   db: Db,
   profile: Profile,
   engineVersion: string,
 ): Promise<PublicSession> {
-  const active = await db
-    .select({ id: learningSessions.id })
-    .from(learningSessions)
-    .where(
-      and(
-        eq(learningSessions.analyticsSubjectId, profile.analyticsSubjectId),
-        eq(learningSessions.status, 'ACTIVE'),
-      ),
-    )
-    .orderBy(desc(learningSessions.updatedAt))
-    .limit(1);
-
-  if (active[0]) {
-    return getSession(db, profile, active[0].id);
+  const activeId = await findActiveSessionId(db, profile.analyticsSubjectId);
+  if (activeId) {
+    return getSession(db, profile, activeId);
   }
 
   const problem = await pickNextProblem(db, profile.analyticsSubjectId);
@@ -80,21 +84,36 @@ export async function startSession(
     problemDefinition,
   });
 
-  await db.transaction(async (tx) => {
-    await tx.insert(learningSessions).values({
-      id: sessionId,
-      analyticsSubjectId: profile.analyticsSubjectId,
-      problemId: problem.id,
-      engineVersion,
-      contentVersion: problem.contentVersion,
-      status: 'ACTIVE',
-      stateVersion: 0,
-      currentChunkIndex: 0,
-      workspaceState: workspace,
-      acceptedCommitments: [],
-      requiredNextAction: publicSession.required_next_action,
-      publicState: publicSession,
-    });
+  const won = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(learningSessions)
+      .values({
+        id: sessionId,
+        analyticsSubjectId: profile.analyticsSubjectId,
+        problemId: problem.id,
+        engineVersion,
+        contentVersion: problem.contentVersion,
+        status: 'ACTIVE',
+        stateVersion: 0,
+        currentChunkIndex: 0,
+        workspaceState: workspace,
+        acceptedCommitments: [],
+        requiredNextAction: publicSession.required_next_action,
+        publicState: publicSession,
+      })
+      .onConflictDoNothing({
+        target: learningSessions.analyticsSubjectId,
+        where: sql`${learningSessions.status} = 'ACTIVE'`,
+      })
+      .returning({ id: learningSessions.id });
+
+    // Empty RETURNING means the partial unique index rejected us: a concurrent
+    // caller already holds the ACTIVE session for this subject. Do not record
+    // a SESSION_STARTED event for a session we did not actually create.
+    if (inserted.length === 0) {
+      return false;
+    }
+
     await tx.insert(learningEvents).values({
       sessionId,
       analyticsSubjectId: profile.analyticsSubjectId,
@@ -104,9 +123,22 @@ export async function startSession(
       engineVersion,
       contentVersion: problem.contentVersion,
     });
+    return true;
   });
 
-  return publicSession;
+  if (won) {
+    return publicSession;
+  }
+
+  // Lost the race — read back the winner's committed row. In the vanishingly
+  // unlikely case it was already completed/abandoned by the time we look
+  // (e.g. an extremely fast concurrent completion), the ACTIVE slot is free
+  // again, so retry rather than surface an internal error to the caller.
+  const winnerId = await findActiveSessionId(db, profile.analyticsSubjectId);
+  if (!winnerId) {
+    return startSession(db, profile, engineVersion);
+  }
+  return getSession(db, profile, winnerId);
 }
 
 /** Resume an authorized session (J-03). Cross-user access yields a consistent 404 (AC-005). */
