@@ -50,17 +50,22 @@ export function isAddressInTrustedProxies(address: string, trustedProxies: strin
 
   const list = new BlockList();
   for (const entry of trustedProxies) {
-    if (isIP(entry) !== 0) {
-      list.addAddress(entry);
+    const entryVersion = isIP(entry);
+    if (entryVersion === 4) {
+      list.addAddress(entry, 'ipv4');
+      continue;
+    }
+    if (entryVersion === 6) {
+      list.addAddress(entry, 'ipv6');
       continue;
     }
     const slash = entry.lastIndexOf('/');
     if (slash <= 0) continue;
     const addr = entry.slice(0, slash);
     const prefix = Number(entry.slice(slash + 1));
-    const entryVersion = isIP(addr);
-    if (entryVersion === 4) list.addSubnet(addr, prefix, 'ipv4');
-    else if (entryVersion === 6) list.addSubnet(addr, prefix, 'ipv6');
+    const cidrVersion = isIP(addr);
+    if (cidrVersion === 4) list.addSubnet(addr, prefix, 'ipv4');
+    else if (cidrVersion === 6) list.addSubnet(addr, prefix, 'ipv6');
   }
 
   return list.check(peer, version === 4 ? 'ipv4' : 'ipv6');

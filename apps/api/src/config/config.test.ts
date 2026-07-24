@@ -117,4 +117,14 @@ describe('normalizeIp / isAddressInTrustedProxies', () => {
     expect(isAddressInTrustedProxies('2001:db8::abcd', ['2001:db8::/32'])).toBe(true);
     expect(isAddressInTrustedProxies('::ffff:127.0.0.1', ['127.0.0.1'])).toBe(true);
   });
+
+  it('matches exact IPv6 trusted proxies without throwing', () => {
+    expect(isAddressInTrustedProxies('::1', ['::1'])).toBe(true);
+    expect(isAddressInTrustedProxies('2001:db8::1', ['2001:db8::1'])).toBe(true);
+  });
+
+  it('rejects exact IPv6 non-matches', () => {
+    expect(isAddressInTrustedProxies('2001:db8::2', ['2001:db8::1'])).toBe(false);
+    expect(isAddressInTrustedProxies('::2', ['::1'])).toBe(false);
+  });
 });
