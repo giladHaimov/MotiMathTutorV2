@@ -26,6 +26,28 @@ jobs:
 
       - name: Run full verification gate
         env:
-          # Ubuntu runners have no Xcode; skip is explicit and is not release evidence.
+          # Ubuntu has no Xcode. This skip is NOT AC-047 evidence; the ios-smoke
+          # macOS job below is the required iOS gate.
           ALLOW_IOS_SMOKE_SKIP: '1'
         run: npm run verify
+
+  ios-smoke:
+    name: Capacitor iOS smoke (AC-047)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capacitor iOS build smoke
+        env:
+          # Must NOT set ALLOW_IOS_SMOKE_SKIP — fail if Xcode/build unavailable.
+          VERIFY_REQUIRE_IOS: '1'
+        run: bash scripts/capacitor-ios-smoke.sh

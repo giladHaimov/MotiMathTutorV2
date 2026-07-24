@@ -43,6 +43,18 @@ describe('API origin validation (native vs browser)', () => {
     ).toThrow(/credentials/);
   });
 
+  it('rejects path, query, and hash — origin only', () => {
+    expect(() => resolveNativeApiBaseUrl('https://api.example.com/v1', 'production')).toThrow(
+      /origin only/,
+    );
+    expect(() => resolveNativeApiBaseUrl('https://api.example.com?x=1', 'production')).toThrow(
+      /origin only/,
+    );
+    expect(() => resolveNativeApiBaseUrl('https://api.example.com/#frag', 'production')).toThrow(
+      /origin only/,
+    );
+  });
+
   it('maps vite mode flags', () => {
     expect(viteModeToRuntime('development', false)).toBe('development');
     expect(viteModeToRuntime('production', true)).toBe('production');

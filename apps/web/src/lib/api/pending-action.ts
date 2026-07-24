@@ -1,9 +1,16 @@
-import type { ActionPayload, ActionType } from '@app/contracts';
+import {
+  actionPayloadSchema,
+  actionTypeSchema,
+  type ActionPayload,
+  type ActionType,
+} from '@app/contracts';
+import { z } from 'zod';
 
 /**
  * In-flight action retained across network loss, refresh, and app restart so
  * retries reuse the same `client_action_id` (PB-016 / AC-048). Cleared only
- * after a known server outcome (success or authoritative conflict).
+ * after a known server outcome (success or authoritative conflict), or a
+ * definitive 401 logout — never on transient network failure during boot.
  */
 export interface PendingAction {
   session_id: string;
@@ -15,6 +22,17 @@ export interface PendingAction {
 
 export const PENDING_ACTION_STORAGE_KEY = 'reasoning_tutor_pending_action';
 
+/** Strict validation before any Retry uses restored pending state. */
+export const pendingActionSchema = z
+  .object({
+    session_id: z.string().uuid(),
+    client_action_id: z.string().uuid(),
+    expected_state_version: z.number().int().min(0),
+    action_type: actionTypeSchema,
+    payload: actionPayloadSchema,
+  })
+  .strict();
+
 export function createPendingAction(
   sessionId: string,
   actionType: ActionType,
@@ -22,13 +40,13 @@ export function createPendingAction(
   expectedStateVersion: number,
   clientActionId: string,
 ): PendingAction {
-  return {
+  return pendingActionSchema.parse({
     session_id: sessionId,
     client_action_id: clientActionId,
     expected_state_version: expectedStateVersion,
     action_type: actionType,
     payload,
-  };
+  });
 }
 
 /** True when a failed submit should keep the pending action for Retry. */
@@ -37,20 +55,17 @@ export function shouldRetainPendingForRetry(status: number | null): boolean {
   return status >= 500;
 }
 
+/** Clear durable pending only on definitive unauthenticated outcome, not network blips. */
+export function shouldClearPendingOnAuthFailure(status: number | null): boolean {
+  return status === 401;
+}
+
 export function parsePendingAction(raw: string | null | undefined): PendingAction | null {
   if (!raw) return null;
   try {
-    const data = JSON.parse(raw) as Partial<PendingAction>;
-    if (
-      typeof data.session_id !== 'string' ||
-      typeof data.client_action_id !== 'string' ||
-      typeof data.expected_state_version !== 'number' ||
-      typeof data.action_type !== 'string' ||
-      data.payload === undefined
-    ) {
-      return null;
-    }
-    return data as PendingAction;
+    const data: unknown = JSON.parse(raw);
+    const parsed = pendingActionSchema.safeParse(data);
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -62,12 +77,20 @@ export function parsePendingAction(raw: string | null | undefined): PendingActio
  */
 export function savePendingAction(action: PendingAction): void {
   if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(PENDING_ACTION_STORAGE_KEY, JSON.stringify(action));
+  localStorage.setItem(
+    PENDING_ACTION_STORAGE_KEY,
+    JSON.stringify(pendingActionSchema.parse(action)),
+  );
 }
 
 export function loadPendingAction(): PendingAction | null {
   if (typeof localStorage === 'undefined') return null;
-  return parsePendingAction(localStorage.getItem(PENDING_ACTION_STORAGE_KEY));
+  const raw = localStorage.getItem(PENDING_ACTION_STORAGE_KEY);
+  const parsed = parsePendingAction(raw);
+  if (raw && !parsed) {
+    localStorage.removeItem(PENDING_ACTION_STORAGE_KEY);
+  }
+  return parsed;
 }
 
 export function clearPendingAction(): void {

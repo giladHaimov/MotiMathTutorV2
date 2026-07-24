@@ -94,4 +94,20 @@ describe('Better Auth bearer session token (native-only issuance)', () => {
     expect(signUp.statusCode).toBeLessThan(400);
     expect(authTokenHeader(signUp)).toBeNull();
   });
+
+  it('spoofed X-Client-Platform from a browser Origin does not issue a bearer token', async () => {
+    const email = `header-spoof-${randomUUID()}@example.com`;
+    const signUp = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      headers: {
+        'x-forwarded-for': uniqueTestIp(email),
+        'x-client-platform': 'capacitor',
+        origin: 'http://localhost:5173',
+      },
+      payload: { email, password: 'Passw0rd!123', name: 'Header Spoof' },
+    });
+    expect(signUp.statusCode).toBeLessThan(400);
+    expect(authTokenHeader(signUp)).toBeNull();
+  });
 });

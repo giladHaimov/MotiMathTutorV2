@@ -2,7 +2,8 @@
  * Separates browser vs native API origin configuration.
  *
  * - Browser: always same-origin relative URLs (ignores VITE_API_BASE_URL).
- * - Native (Capacitor): requires VITE_API_BASE_URL; production must be https://;
+ * - Native (Capacitor): requires VITE_API_BASE_URL as an origin only
+ *   (scheme + host + optional port); production must be https://;
  *   http:// is allowed only in development/test.
  */
 
@@ -33,7 +34,14 @@ export function resolveNativeApiBaseUrl(raw: string | undefined, mode: ClientRun
     throw new Error('VITE_API_BASE_URL must not embed credentials');
   }
 
-  return value.replace(/\/$/, '');
+  const path = url.pathname === '/' ? '' : url.pathname;
+  if (path !== '' || url.search !== '' || url.hash !== '') {
+    throw new Error(
+      'VITE_API_BASE_URL must be an origin only (scheme://host[:port]), with no path, query, or hash',
+    );
+  }
+
+  return url.origin;
 }
 
 export function apiBaseUrlForRuntime(options: {

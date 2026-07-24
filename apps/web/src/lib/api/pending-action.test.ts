@@ -6,6 +6,7 @@ import {
   loadPendingAction,
   parsePendingAction,
   savePendingAction,
+  shouldClearPendingOnAuthFailure,
   shouldRetainPendingForRetry,
 } from './pending-action.js';
 
@@ -35,14 +36,14 @@ describe('pending action retry helpers (AC-048)', () => {
 
   it('creates a pending action with session_id and stable client_action_id', () => {
     const pending = createPendingAction(
-      'session-1',
+      '11111111-1111-4111-8111-111111111111',
       'ASSIGN_SLOT',
       { slot: 'WHOLE', token_id: 't1' },
       3,
-      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
     );
-    expect(pending.session_id).toBe('session-1');
-    expect(pending.client_action_id).toBe('11111111-1111-4111-8111-111111111111');
+    expect(pending.session_id).toBe('11111111-1111-4111-8111-111111111111');
+    expect(pending.client_action_id).toBe('22222222-2222-4222-8222-222222222222');
     expect(pending.expected_state_version).toBe(3);
     expect(pending.action_type).toBe('ASSIGN_SLOT');
   });
@@ -56,9 +57,16 @@ describe('pending action retry helpers (AC-048)', () => {
     expect(shouldRetainPendingForRetry(401)).toBe(false);
   });
 
+  it('clears pending on auth failure only for 401', () => {
+    expect(shouldClearPendingOnAuthFailure(401)).toBe(true);
+    expect(shouldClearPendingOnAuthFailure(null)).toBe(false);
+    expect(shouldClearPendingOnAuthFailure(500)).toBe(false);
+    expect(shouldClearPendingOnAuthFailure(503)).toBe(false);
+  });
+
   it('persists and restores the exact client_action_id across reload', () => {
     const pending = createPendingAction(
-      'session-1',
+      '11111111-1111-4111-8111-111111111111',
       'ASSIGN_SLOT',
       { slot: 'WHOLE', token_id: 't1' },
       0,
@@ -75,8 +83,45 @@ describe('pending action retry helpers (AC-048)', () => {
     expect(loadPendingAction()).toBeNull();
   });
 
-  it('rejects malformed stored payloads', () => {
+  it('rejects malformed stored payloads and clears corrupt storage', () => {
     expect(parsePendingAction('{')).toBeNull();
     expect(parsePendingAction('{"session_id":"x"}')).toBeNull();
+    expect(
+      parsePendingAction(
+        JSON.stringify({
+          session_id: 'not-a-uuid',
+          client_action_id: '22222222-2222-4222-8222-222222222222',
+          expected_state_version: 0,
+          action_type: 'ASSIGN_SLOT',
+          payload: {},
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parsePendingAction(
+        JSON.stringify({
+          session_id: '11111111-1111-4111-8111-111111111111',
+          client_action_id: '22222222-2222-4222-8222-222222222222',
+          expected_state_version: 0,
+          action_type: 'NOT_A_REAL_ACTION',
+          payload: {},
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parsePendingAction(
+        JSON.stringify({
+          session_id: '11111111-1111-4111-8111-111111111111',
+          client_action_id: '22222222-2222-4222-8222-222222222222',
+          expected_state_version: 0,
+          action_type: 'ASSIGN_SLOT',
+          payload: { slot: 'WHOLE', token_id: 't1', extra: true },
+        }),
+      ),
+    ).toBeNull();
+
+    memory.set(PENDING_ACTION_STORAGE_KEY, '{"broken":true}');
+    expect(loadPendingAction()).toBeNull();
+    expect(memory.has(PENDING_ACTION_STORAGE_KEY)).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import {
   createPendingAction,
   loadPendingAction,
   savePendingAction,
+  shouldClearPendingOnAuthFailure,
   shouldRetainPendingForRetry,
   type PendingAction,
 } from '../lib/api/pending-action.js';
@@ -62,11 +63,15 @@ export function App(): React.JSX.Element {
       await initApiClient();
       await api.me();
       setAuth('authed');
-    } catch {
+    } catch (err) {
       setAuth('anon');
       setSession(null);
-      dropPending();
-      setPending(null);
+      // Durability: only clear pending on definitive 401, never on network/5xx.
+      const status = err instanceof ApiRequestError ? err.status : null;
+      if (shouldClearPendingOnAuthFailure(status)) {
+        dropPending();
+        setPending(null);
+      }
     }
   }, []);
 
