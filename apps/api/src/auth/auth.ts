@@ -36,6 +36,17 @@ export const auth = betterAuth({
     // Resolve the client IP from the proxy header for per-IP auth rate limiting.
     ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
   },
+  // Explicit limits: Playwright/CI share one fallback bucket when no client IP is
+  // forwarded (Better Auth warning). Default special rules throttle sign-up/sign-in
+  // to 3/10s which breaks the multi-scenario acceptance suite on a shared bucket.
+  rateLimit: {
+    window: 60,
+    max: 200,
+    customRules: {
+      '/sign-up/email': { window: 60, max: 50 },
+      '/sign-in/email': { window: 60, max: 50 },
+    },
+  },
   // Better Auth generates its own string IDs (the auth_* PKs have no DB default).
 });
 

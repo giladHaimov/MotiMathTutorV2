@@ -56,6 +56,11 @@ export async function startSession(
   const chunkRows = await loadChunkRows(db, problem.id);
   const workspace = initialWorkspace(problem.definition.workspace_slots);
   const sessionId = randomUUID();
+  const problemDefinition = toEngineProblemDefinition(
+    problem.problemKey,
+    problem.definition,
+    chunkRows.length,
+  );
 
   const publicSession = buildPublicSession({
     sessionId,
@@ -69,6 +74,7 @@ export async function startSession(
     acceptedCommitments: [],
     chunks: chunkRows,
     message: null,
+    problemDefinition,
   });
 
   await db.transaction(async (tx) => {
@@ -83,7 +89,7 @@ export async function startSession(
       currentChunkIndex: 0,
       workspaceState: workspace,
       acceptedCommitments: [],
-      requiredNextAction: { action_type: null },
+      requiredNextAction: publicSession.required_next_action,
       publicState: publicSession,
     });
     await tx.insert(learningEvents).values({
@@ -115,6 +121,7 @@ export async function getSession(
 
   const definition = await loadDefinition(db, s.problemId);
   const chunkRows = await loadChunkRows(db, s.problemId);
+  const problemDefinition = toEngineProblemDefinition('pinned', definition, chunkRows.length);
 
   return buildPublicSession({
     sessionId: s.id,
@@ -128,6 +135,7 @@ export async function getSession(
     acceptedCommitments: s.acceptedCommitments as string[],
     chunks: chunkRows,
     message: null,
+    problemDefinition,
   });
 }
 
@@ -190,6 +198,7 @@ export async function submitAction(
 
     const definition = await loadDefinition(tx, s.problemId);
     const chunkRows = await loadChunkRows(tx, s.problemId);
+    const problemDefinition = toEngineProblemDefinition('pinned', definition, chunkRows.length);
 
     const seqRows = await tx
       .select({ next: sql<number>`coalesce(max(${stageAttempts.sequenceNo}), 0) + 1` })
@@ -203,6 +212,7 @@ export async function submitAction(
       contentVersion: s.contentVersion,
       workspaceSlots: definition.workspace_slots,
       chunks: chunkRows,
+      problemDefinition,
     };
 
     // (6) State-version compare — stale version changes nothing (AC-018).
@@ -248,7 +258,7 @@ export async function submitAction(
       accepted_commitments: s.acceptedCommitments as string[],
     };
     const result = applyAction({
-      problemDefinition: toEngineProblemDefinition('pinned', definition, chunkRows.length),
+      problemDefinition,
       sessionState: engineState,
       action: { action_type: req.action_type, payload: req.payload },
     });
@@ -257,10 +267,12 @@ export async function submitAction(
 
     if (result.outcome === 'ACCEPTED') {
       const newVersion = s.stateVersion + 1;
+      const nextStatus = result.nextState.status;
+      const completedAt = nextStatus === 'COMPLETED' ? new Date() : null;
       const publicSession = buildPublicSession({
         ...baseSerialize,
         stateVersion: newVersion,
-        status: 'ACTIVE',
+        status: nextStatus,
         currentChunkIndex: result.nextState.current_chunk_index,
         workspace: result.nextState.workspace,
         acceptedCommitments: result.nextState.accepted_commitments,
@@ -272,9 +284,12 @@ export async function submitAction(
         .update(learningSessions)
         .set({
           stateVersion: newVersion,
+          status: nextStatus,
+          completedAt,
           currentChunkIndex: result.nextState.current_chunk_index,
           workspaceState: result.nextState.workspace,
           acceptedCommitments: result.nextState.accepted_commitments,
+          requiredNextAction: publicSession.required_next_action,
           publicState: publicSession,
           updatedAt: new Date(),
         })

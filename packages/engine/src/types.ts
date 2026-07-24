@@ -8,6 +8,12 @@ import type { ActionType, Slot } from '@app/contracts';
  * owns the transaction that persists the result.
  */
 
+/** Reveal gate: accepting `requires_commitment` advances disclosure to `reveals_chunk_index`. */
+export interface EngineGate {
+  reveals_chunk_index: number;
+  requires_commitment: string;
+}
+
 /** The slice-relevant projection of a problem's immutable `definition` jsonb. */
 export interface EngineProblemDefinition {
   problem_key: string;
@@ -24,6 +30,12 @@ export interface EngineProblemDefinition {
   }>;
   /** Number of chunks in the problem (bounds the reveal index). */
   chunk_count: number;
+  /** Commitment gates that unlock the next chunk (data-driven reveal). */
+  gates: EngineGate[];
+  /** Structural slots that must be filled before a final answer is allowed. */
+  completion_rule: { requires_slots_filled: Slot[] };
+  /** Server-only expected numeric/string result (never serialized publicly). */
+  expected_final_result: { value: string; unit: string };
 }
 
 export interface WorkspaceState {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { PublicSession, Slot } from '@app/contracts';
+import type { ActionPayload, ActionType, PublicSession, Slot } from '@app/contracts';
 import { api, ApiRequestError, newClientActionId } from '../lib/api/client.js';
 import { AuthView } from '../features/auth/AuthView.js';
 import { DashboardView } from '../features/dashboard/DashboardView.js';
@@ -31,26 +31,23 @@ export function App(): React.JSX.Element {
     setSession(s);
   }
 
-  // Submit an action; retries reuse the same client_action_id (idempotent).
-  async function submit(
-    action: 'ASSIGN_SLOT' | 'DELETE_ASSIGNMENT',
-    slot: Slot,
-    tokenId?: string,
-  ): Promise<void> {
+  // Submit a structured action. Semantic validity is decided only by the server
+  // (PB-039 / AC-050). Conflict responses replace local state with authoritative
+  // current_state.
+  async function submit(actionType: ActionType, payload: ActionPayload): Promise<void> {
     if (!session) return;
     setBanner(null);
     try {
       const updated = await api.submitAction(session.session_id, {
         client_action_id: newClientActionId(),
         expected_state_version: session.state_version,
-        action_type: action,
-        payload: tokenId ? { slot, token_id: tokenId } : { slot },
+        action_type: actionType,
+        payload,
       });
       setSession(updated);
       if (updated.message) setBanner(updated.message);
     } catch (err) {
       if (err instanceof ApiRequestError && err.currentState) {
-        // Conflict: server state is authoritative.
         setSession(err.currentState);
         setBanner(err.body.message);
       } else if (err instanceof ApiRequestError) {
@@ -87,8 +84,12 @@ export function App(): React.JSX.Element {
         <ProblemView
           session={session}
           banner={banner}
-          onAssign={(slot, tokenId) => void submit('ASSIGN_SLOT', slot, tokenId)}
-          onDelete={(slot) => void submit('DELETE_ASSIGNMENT', slot)}
+          onAssign={(slot: Slot, tokenId: string) =>
+            void submit('ASSIGN_SLOT', { slot, token_id: tokenId })
+          }
+          onDelete={(slot: Slot) => void submit('DELETE_ASSIGNMENT', { slot })}
+          onContinue={() => void submit('SUBMIT_COMMITMENT', {})}
+          onSubmitAnswer={(value: string) => void submit('SUBMIT_FINAL_ANSWER', { value })}
           onReload={() => void openSession(session.session_id)}
           onBack={() => {
             setSession(null);

@@ -1,10 +1,10 @@
+import { publicSessionSchema, type PublicSession, type Slot } from '@app/contracts';
 import {
-  publicSessionSchema,
-  type ActionType,
-  type PublicSession,
-  type Slot,
-} from '@app/contracts';
-import type { WorkspaceState } from '@app/engine';
+  computeAllowedActions,
+  computeRequiredNextAction,
+  type EngineProblemDefinition,
+  type WorkspaceState,
+} from '@app/engine';
 
 export interface ChunkRow {
   orderIndex: number;
@@ -25,6 +25,8 @@ export interface SerializeInput {
   acceptedCommitments: string[];
   chunks: ChunkRow[];
   message: string | null;
+  /** Projected problem definition — drives allowed_actions / required_next_action. */
+  problemDefinition: EngineProblemDefinition;
 }
 
 /**
@@ -32,10 +34,23 @@ export interface SerializeInput {
  *
  * Only chunks at or before `currentChunkIndex` are exposed — future hidden
  * chunks and raw full problem text can never leak (PB-002/PB-004, AC-011/012).
- * The result is re-validated against the contract schema as a final guard.
+ * `expected_final_result` is never included. The result is re-validated against
+ * the contract schema as a final guard.
  */
 export function buildPublicSession(input: SerializeInput): PublicSession {
-  const activeActions: ActionType[] = ['ASSIGN_SLOT', 'DELETE_ASSIGNMENT'];
+  const engineState = {
+    status: input.status,
+    current_chunk_index: input.currentChunkIndex,
+    workspace: input.workspace,
+    accepted_commitments: input.acceptedCommitments,
+  };
+
+  const allowedActions =
+    input.status === 'ACTIVE' ? computeAllowedActions(input.problemDefinition, engineState) : [];
+  const requiredNext =
+    input.status === 'ACTIVE'
+      ? computeRequiredNextAction(input.problemDefinition, engineState)
+      : { action_type: null };
 
   const visibleChunks = input.chunks
     .filter((c) => c.orderIndex <= input.currentChunkIndex)
@@ -63,8 +78,8 @@ export function buildPublicSession(input: SerializeInput): PublicSession {
     visible_chunks: visibleChunks,
     workspace: { slots },
     accepted_commitments: input.acceptedCommitments,
-    required_next_action: { action_type: null },
-    allowed_actions: input.status === 'ACTIVE' ? activeActions : [],
+    required_next_action: requiredNext,
+    allowed_actions: allowedActions,
     message: input.message,
     engine_version: input.engineVersion,
     content_version: input.contentVersion,
