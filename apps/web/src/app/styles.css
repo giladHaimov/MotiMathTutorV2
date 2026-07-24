@@ -88,6 +88,38 @@ input {
   color: #b8860b;
 }
 
+.message--conflict {
+  color: #a15c00;
+  font-weight: 600;
+}
+
+.offline-banner {
+  background: #3d3d3d;
+  color: #fff;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+
+.status-line {
+  color: #555;
+  font-style: italic;
+}
+
+.retry {
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0;
+  background: #1a5f4a;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+}
+
+.guidance {
+  color: #6b4f1d;
+}
+
 .actions {
   margin: 0.75rem 0;
 }

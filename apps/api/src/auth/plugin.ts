@@ -20,13 +20,13 @@ declare module 'fastify' {
 /**
  * Mount Better Auth's handler at /api/auth/* (ARCHITECTURE §6). Better Auth owns
  * registration, login, logout, and session cookies (AC-001/003).
+ *
+ * Cookie sessions only — headers are forwarded as returned by Better Auth.
  */
 export function registerAuthRoutes(app: FastifyInstance): void {
   app.route({
     method: ['GET', 'POST'],
     url: '/api/auth/*',
-    // Better Auth needs the raw request; disable Fastify's rate limit here is not
-    // needed — auth rate limiting is applied globally where configured.
     async handler(request: FastifyRequest, reply: FastifyReply) {
       const auth = request.server.auth;
       const url = new URL(request.url, `${request.protocol}://${request.hostname}`);
@@ -42,8 +42,8 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       const response = await auth.handler(webRequest);
       reply.status(response.status);
       response.headers.forEach((value, key) => {
-        // Preserve multiple Set-Cookie headers.
-        if (key.toLowerCase() === 'set-cookie') {
+        const lower = key.toLowerCase();
+        if (lower === 'set-cookie') {
           reply.header('set-cookie', value);
         } else {
           reply.header(key, value);

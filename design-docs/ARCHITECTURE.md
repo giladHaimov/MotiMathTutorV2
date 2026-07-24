@@ -19,7 +19,7 @@
 | Mobile | Capacitor wrapping the same web build |
 | API | Fastify |
 | Validation | Zod schemas shared through `packages/contracts` |
-| Authentication | Better Auth, email/password, PostgreSQL/Drizzle adapter; cookie session for web and approved bearer/session-token path for Capacitor |
+| Authentication | Better Auth, email/password, PostgreSQL/Drizzle adapter; **cookie sessions only** for browser and Capacitor (same-origin via Capacitor `server.url` / configured API origin). No bearer/`set-auth-token` path. |
 | Database | Standard PostgreSQL |
 | DB access | Drizzle ORM with explicit SQL migrations and `node-postgres` |
 | Logging | Fastify/Pino structured JSON logs |
@@ -198,6 +198,8 @@ All API responses use JSON. Errors use:
 ### Auth endpoints
 
 Mounted under `/api/auth/*` through Better Auth.
+
+Authentication is **cookie-session only** for both the browser client and Capacitor. Capacitor packages load the SPA from the configured API/server origin so session cookies remain same-origin. There is no server-issued bearer/`set-auth-token` path, no native-client proof via caller-controlled headers, and no separate secure token-storage auth channel.
 
 ### Student endpoints
 
@@ -601,6 +603,14 @@ Drizzle migration bookkeeping may create its own internal migration table/schema
 
 ## 11. Authentication and Authorization Matrix
 
+### Authentication mechanism (active)
+
+- Browser and Capacitor both authenticate with Better Auth **HTTP cookie sessions**.
+- Capacitor loads the SPA from the configured API/server origin (`VITE_CAPACITOR_SERVER_URL` / Capacitor `server.url`) so authentication stays same-origin with `/api`.
+- Bearer tokens, `set-auth-token` exposure, native-client proof headers, and secure token storage for auth credentials are **not** part of this architecture.
+- Headers, `Origin`, localhost/`capacitor://` origins, `User-Agent`, or client-platform markers (`X-Client-Platform` or similar) **must not** be treated as proof that the caller is a trusted native app.
+- A separate bearer (or other non-cookie) flow may be introduced **only** through a separately reviewed OAuth/OIDC Authorization Code + PKCE design, or a device/app-bound cryptographic enrollment design — never via caller-controlled header/origin checks alone.
+
 Legend: `O` own records only, `N` no access, `I` internal process only.
 
 | Resource/action | Anonymous | Student | Content Import | Backend System |
@@ -695,8 +705,7 @@ Required contextual fields where relevant:
 Never log:
 
 - password/password hash;
-- session token;
-- bearer token;
+- session cookie / session token values or other auth credential material;
 - complete learning-event payload by default;
 - email in learning-flow logs;
 - future hidden chunk content.
@@ -786,11 +795,17 @@ Acceptance sequence:
 
 The same React/Vite build is used for browser and Capacitor.
 
+### Authentication (Capacitor)
+
+Capacitor uses the **same Better Auth cookie-session path** as the browser. The native WebView loads the SPA from the configured API/server origin so cookies are same-origin with `/api`. There is no Capacitor-specific bearer token, `set-auth-token` issuance, native-client proof header, or secure token-storage auth channel in this architecture.
+
+Caller-controlled signals — including `Origin`, localhost/`capacitor://` origins, `User-Agent`, and client-platform markers such as `X-Client-Platform` — must never be treated as proof of a trusted native client. Any future non-cookie auth for native apps requires a separately reviewed OAuth/OIDC Authorization Code + PKCE flow or device/app-bound cryptographic enrollment.
+
 Mobile-specific code is limited to:
 
-- secure handling of the approved auth session/bearer token path;
+- packaging that points the WebView at the configured API/server origin for same-origin cookie sessions;
 - network/connectivity UX;
-- platform build configuration;
+- platform build configuration (including debug-only HTTP/ATS exceptions for local development);
 - safe-area and keyboard behavior;
 - app lifecycle resume.
 

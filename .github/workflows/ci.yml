@@ -25,4 +25,42 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run full verification gate
+        env:
+          # Ubuntu has no Xcode. This skip is NOT AC-047 evidence; the ios-smoke
+          # macOS job below is the required iOS gate.
+          ALLOW_IOS_SMOKE_SKIP: '1'
         run: npm run verify
+
+  ios-smoke:
+    name: Capacitor iOS smoke (AC-047)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (clean)
+        run: npm ci
+
+      - name: Build web + Capacitor sync android/ios
+        run: |
+          npm run build --workspace @app/web
+          (cd apps/web && npx cap sync android)
+          (cd apps/web && npx cap sync ios)
+
+      - name: Assert no stale secure-storage in iOS Podfile after sync
+        run: |
+          if grep -qi 'aparajita\|secure-storage\|SecureStorage' apps/web/ios/App/Podfile apps/web/ios/App/Podfile.lock; then
+            echo "stale secure-storage references remain after cap sync" >&2
+            exit 1
+          fi
+
+      - name: Capacitor iOS build smoke (pod install + xcodebuild Debug/Release)
+        env:
+          # Must NOT set ALLOW_IOS_SMOKE_SKIP — fail if Xcode/build unavailable.
+          VERIFY_REQUIRE_IOS: '1'
+        run: bash scripts/capacitor-ios-smoke.sh

@@ -1,9 +1,11 @@
 import type { ActionRequest, Dashboard, Me, PublicSession } from '@app/contracts';
+import { apiBaseUrl, assertPlatformApiOrigins } from '../platform.js';
 
 /**
  * Thin API client. The client only renders server state and sends structured
- * actions — it never decides semantic validity (PB-039 / AC-050). All requests
- * send credentials so the Better Auth cookie session is included.
+ * actions — it never decides semantic validity (PB-039 / AC-050).
+ *
+ * Authentication: Better Auth cookie sessions (`credentials: 'include'`).
  */
 
 export interface ApiError {
@@ -22,17 +24,65 @@ export class ApiRequestError extends Error {
   }
 }
 
+/** Thrown when fetch fails before an HTTP response (offline / aborted / DNS). */
+export class NetworkError extends Error {
+  constructor(message = 'Network request failed') {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
+export function initApiClient(): Promise<void> {
+  assertPlatformApiOrigins();
+  return Promise.resolve();
+}
+
+function resolveUrl(path: string): string {
+  const base = apiBaseUrl();
+  return base ? `${base}${path}` : path;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
-  });
+  await initApiClient();
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    ...(init.headers as Record<string, string> | undefined),
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(resolveUrl(path), {
+      ...init,
+      credentials: 'include',
+      headers,
+    });
+  } catch {
+    throw new NetworkError();
+  }
+
   const text = await res.text();
-  const data = text.length > 0 ? JSON.parse(text) : null;
+  let data: unknown = null;
+  if (text.length > 0) {
+    try {
+      data = JSON.parse(text) as unknown;
+    } catch {
+      if (!res.ok) {
+        throw new ApiRequestError(res.status, {
+          code: 'INTERNAL_ERROR',
+          message: 'Request failed',
+        });
+      }
+      throw new NetworkError('Invalid response body');
+    }
+  }
+
   if (!res.ok) {
-    const err = (data?.error ?? { code: 'INTERNAL_ERROR', message: 'Request failed' }) as ApiError;
-    throw new ApiRequestError(res.status, err, data?.current_state as PublicSession | undefined);
+    const record = data as { error?: ApiError; current_state?: PublicSession } | null;
+    const err = (record?.error ?? {
+      code: 'INTERNAL_ERROR',
+      message: 'Request failed',
+    }) as ApiError;
+    throw new ApiRequestError(res.status, err, record?.current_state);
   }
   return data as T;
 }
