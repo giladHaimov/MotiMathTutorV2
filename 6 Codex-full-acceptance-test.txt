@@ -1,7 +1,0 @@
-Perform final acceptance against the ORIGINAL PRODUCT_BOOK.md, PRODUCT.md, ARCHITECTURE.md and ACCEPTANCE.md.
-
-Independently trace every Must requirement and major flow to working code and automated or explicit human-test evidence. From a clean clone/database run migrations, npm run verify, Docker build/start, real auth/authorization, persistence and realistic happy/sad scenarios. Add audit-only black-box tests when useful; do not modify production code.
-
-Check missing flows, fake DB/auth, TODO/mock/stub paths, Product Book deviations, hidden-content bypass and packaging failures.
-
-Return: PASS/BLOCK, missing/failed requirements, blocking/important defects, exact remediation and release recommendation.

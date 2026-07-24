@@ -1,7 +1,0 @@
-Read PRODUCT.md, ARCHITECTURE.md, ACCEPTANCE.md, AGENTS.md and [SLICE_FILE].
-
-Implement only this Slice. Stop only for material ambiguity. Do not edit authoritative design documents or weaken verification. Use real auth/PostgreSQL; no production TODO, mock, stub or in-memory fallback.
-
-Add required unit, integration and realistic scenario tests. Run npm run check during work and npm run verify when complete. Stop after two failed repairs of the same root cause.
-
-Commit only after verification passes. Report PB/AC coverage, files, tests, assumptions and risks.

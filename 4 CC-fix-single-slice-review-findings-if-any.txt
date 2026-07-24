@@ -1,5 +1,0 @@
-Fix only the attached Codex findings.
-
-Do not change product/design intent or weaken tests/verification. If a finding requires a design change, stop and report the conflict.
-
-Run npm run verify, commit, and map every finding to changed files and verification evidence.
