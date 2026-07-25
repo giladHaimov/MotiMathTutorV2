@@ -28,7 +28,7 @@ export function AuthView({ onAuthenticated }: { onAuthenticated: () => void }): 
   }
 
   return (
-    <div className="card" data-testid="auth-view">
+    <div className="card" data-testid="auth-view" aria-label="auth-view">
       <h1>{mode === 'login' ? 'Log in' : 'Create account'}</h1>
       <form onSubmit={submit}>
         {mode === 'register' && (
@@ -37,6 +37,7 @@ export function AuthView({ onAuthenticated }: { onAuthenticated: () => void }): 
             <input
               id="name"
               data-testid="name"
+              aria-label="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -47,6 +48,7 @@ export function AuthView({ onAuthenticated }: { onAuthenticated: () => void }): 
           id="email"
           type="email"
           data-testid="email"
+          aria-label="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
@@ -56,11 +58,12 @@ export function AuthView({ onAuthenticated }: { onAuthenticated: () => void }): 
           id="password"
           type="password"
           data-testid="password"
+          aria-label="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
-        <button type="submit" data-testid="submit-auth" disabled={busy}>
+        <button type="submit" data-testid="submit-auth" aria-label="submit-auth" disabled={busy}>
           {mode === 'login' ? 'Log in' : 'Register'}
         </button>
       </form>
@@ -72,6 +75,7 @@ export function AuthView({ onAuthenticated }: { onAuthenticated: () => void }): 
       <button
         type="button"
         data-testid="toggle-mode"
+        aria-label="toggle-mode"
         onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
       >
         {mode === 'login' ? 'Need an account? Register' : 'Have an account? Log in'}

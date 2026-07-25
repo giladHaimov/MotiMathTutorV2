@@ -73,7 +73,7 @@ export function DashboardView({
   }
 
   return (
-    <div className="card" data-testid="dashboard">
+    <div className="card" data-testid="dashboard" aria-label="dashboard">
       <h1>Dashboard</h1>
       {loading && (
         <p data-testid="dashboard-loading" role="status">
@@ -84,6 +84,7 @@ export function DashboardView({
         <button
           type="button"
           data-testid="resume-session"
+          aria-label="resume-session"
           disabled={busy}
           onClick={() => void resume(dashboard.active_session!.session_id)}
         >
@@ -97,6 +98,7 @@ export function DashboardView({
         <button
           type="button"
           data-testid="start-session"
+          aria-label="start-session"
           onClick={() => void start()}
           disabled={busy}
         >

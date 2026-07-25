@@ -1,0 +1,44 @@
+appId: com.reasoningtutor.app
+name: Android keyboard and hardware Back preserve prepared session
+tags:
+  - mobile-delta
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn:
+    text: 'resume-session'
+- extendedWaitUntil:
+    visible:
+      text: 'problem-screen'
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: 'final-answer-input'
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    text: 'final-answer-input'
+- inputText: '12'
+- assertVisible:
+    text: 'final-answer-input'
+    focused: true
+- takeScreenshot: keyboard-open-final-answer
+- pressKey: back
+- assertVisible:
+    text: 'final-answer-input'
+- takeScreenshot: keyboard-dismissed-final-answer
+- pressKey: back
+- takeScreenshot: hardware-back-result
+- launchApp
+- extendedWaitUntil:
+    visible:
+      text: 'dashboard'
+    timeout: 20000
+- tapOn:
+    text: 'resume-session'
+- extendedWaitUntil:
+    visible:
+      text: 'final-answer-input'
+    timeout: 20000
+- takeScreenshot: hardware-back-session-intact

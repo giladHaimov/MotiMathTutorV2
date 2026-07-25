@@ -1,18 +1,1 @@
-node_modules
-dist
-build
-coverage
-playwright-report
-test-results
-db/migrations
-**/drizzle/**
-package-lock.json
-design-docs
-PRODUCT_BOOK.md
-SMALL_SAAS_DESIGN_GENERATION_GOVERNANCE_v3.md
-*.txt
-.claude
-apps/api/src/db/schema/auth-schema.ts
-# Capacitor native projects + synced web assets (generated / vendor).
-apps/web/android/**
-apps/web/ios/**
+gilad - what to do now.md

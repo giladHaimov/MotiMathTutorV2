@@ -1,0 +1,39 @@
+appId: com.reasoningtutor.app
+name: Authoritative session resumes after Android process death
+tags:
+  - mobile-delta
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn:
+    text: 'start-session'
+- extendedWaitUntil:
+    visible:
+      text: 'problem-screen'
+    timeout: 20000
+- tapOn: 'token-ex01-c0-whole'
+- tapOn: 'assign-WHOLE'
+- extendedWaitUntil:
+    visible:
+      text: 'state-version-1'
+    timeout: 20000
+- assertVisible: '40 students'
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      text: 'dashboard'
+    timeout: 20000
+- tapOn:
+    text: 'resume-session'
+- extendedWaitUntil:
+    visible:
+      text: 'problem-screen'
+    timeout: 20000
+- assertVisible:
+    text: 'state-version-1'
+- assertVisible: '40 students'
+- assertVisible: 'A class has 40 students.'
+- assertNotVisible: 'Thirty percent wear glasses.'
+- takeScreenshot: resume-authoritative-state

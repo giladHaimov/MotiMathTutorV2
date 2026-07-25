@@ -61,6 +61,7 @@ playwright-report/
 test-results/
 blob-report/
 allure-results/
+maestro/reports/
 
 # Local databases and temp data
 *.sqlite

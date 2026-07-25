@@ -1,0 +1,36 @@
+appId: com.reasoningtutor.app
+androidWebViewHierarchy: devtools
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      text: 'auth-view'
+    timeout: 20000
+- tapOn:
+    text: 'toggle-mode'
+- tapOn:
+    text: 'name'
+- inputText: '${TEST_NAME}'
+- tapOn:
+    text: 'email'
+- inputText: '${TEST_EMAIL}'
+- tapOn:
+    text: 'password'
+- inputText: '${TEST_PASSWORD}'
+- hideKeyboard
+- tapOn:
+    text: 'submit-auth'
+- runFlow:
+    when:
+      visible:
+        text: 'Invalid credentials.'
+    commands:
+      - tapOn:
+          text: 'toggle-mode'
+      - tapOn:
+          text: 'submit-auth'
+- extendedWaitUntil:
+    visible:
+      text: 'dashboard'
+    timeout: 20000

@@ -1,0 +1,20 @@
+appId: com.reasoningtutor.app
+name: Better Auth cookie survives Android process restart
+tags:
+  - mobile-delta
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- assertVisible:
+    text: 'dashboard'
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      text: 'dashboard'
+    timeout: 20000
+- assertNotVisible:
+    text: 'auth-view'
+- assertVisible: 'No active session.'
+- takeScreenshot: cookie-after-cold-restart

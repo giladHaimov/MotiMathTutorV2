@@ -77,18 +77,27 @@ export function ProblemView({
   }
 
   return (
-    <div className="card" data-testid="problem-screen">
+    <div className="card" data-testid="problem-screen" aria-label="problem-screen">
       {pendingActionId && (
         <span data-testid="pending-action-id" hidden>
           {pendingActionId}
         </span>
       )}
-      <button type="button" data-testid="back" onClick={onBack} disabled={submitting}>
+      <button
+        type="button"
+        data-testid="back"
+        aria-label="back-to-dashboard"
+        onClick={onBack}
+        disabled={submitting}
+      >
         ← Dashboard
       </button>
       <p>
-        State version: <span data-testid="state-version">{session.state_version}</span> · Status:{' '}
-        <span data-testid="status">{session.status}</span>
+        State version:{' '}
+        <span data-testid="state-version" aria-label={`state-version-${session.state_version}`}>
+          {session.state_version}
+        </span>{' '}
+        · Status: <span data-testid="status">{session.status}</span>
       </p>
       {isCompleted && (
         <div data-testid="completed">
@@ -127,6 +136,7 @@ export function ProblemView({
                     key={token.token_id}
                     className="token"
                     data-testid={`token-${token.token_id}`}
+                    aria-label={`token-${token.token_id}`}
                     disabled={placed.has(token.token_id) || !canAssign}
                     aria-pressed={selectedToken === token.token_id}
                     onClick={() => setSelectedToken(token.token_id)}
@@ -162,6 +172,7 @@ export function ProblemView({
                 <button
                   type="button"
                   data-testid={`assign-${slot.slot}`}
+                  aria-label={`assign-${slot.slot}`}
                   disabled={!selectedToken || !canAssign}
                   onClick={() => {
                     if (selectedToken) {
@@ -198,6 +209,7 @@ export function ProblemView({
               <input
                 id="final-answer-input"
                 data-testid="final-answer-input"
+                aria-label="final-answer-input"
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
                 inputMode="numeric"

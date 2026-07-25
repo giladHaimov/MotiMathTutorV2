@@ -27,6 +27,7 @@
     "cap:release": "npm run cap:release --workspace @app/web",
     "cap:android:smoke": "bash scripts/capacitor-android-smoke.sh",
     "cap:ios:smoke": "bash scripts/capacitor-ios-smoke.sh",
+    "mobile:delta": "bash maestro/scripts/run-android.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx db/migrate.ts",
     "db:seed": "tsx apps/api/src/modules/content/import-cli.ts",

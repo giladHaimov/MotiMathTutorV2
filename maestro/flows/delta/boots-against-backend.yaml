@@ -1,0 +1,19 @@
+appId: com.reasoningtutor.app
+name: Packaged app boots against configured backend
+tags:
+  - mobile-delta
+androidWebViewHierarchy: devtools
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      text: 'auth-view'
+    timeout: 20000
+- takeScreenshot: boots-auth-view
+- runFlow:
+    file: ../_shared/login.yaml
+- assertVisible:
+    text: 'dashboard'
+- assertVisible: 'No active session.'
+- takeScreenshot: boots-backend-dashboard
