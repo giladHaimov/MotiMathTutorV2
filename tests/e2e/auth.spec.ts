@@ -33,10 +33,18 @@ test('register, logout, log back in with real credentials, logout again', async 
   await expect(page.getByTestId('auth-view')).toBeVisible();
 });
 
-// Guard: a wrong password must be rejected (real server-side auth).
-test('login with a wrong password is rejected', async ({ page }) => {
+// Guard: wrong credentials are rejected and Better Auth's production rate
+// limit remains active inside one isolated browser context.
+test('login with a wrong password is rejected', async ({ page, clientIp }) => {
   const email = `scn01-bad-${Date.now()}@example.com`;
   const password = 'Passw0rd!123';
+  const authRequestIps: string[] = [];
+
+  page.on('request', (request) => {
+    if (request.url().includes('/api/auth/')) {
+      authRequestIps.push(request.headers()['x-forwarded-for'] ?? '');
+    }
+  });
 
   await page.goto('/');
   await page.getByTestId('toggle-mode').click();
@@ -54,4 +62,24 @@ test('login with a wrong password is rejected', async ({ page }) => {
   await page.getByTestId('submit-auth').click();
   await expect(page.getByTestId('auth-error')).toBeVisible();
   await expect(page.getByTestId('dashboard')).toHaveCount(0);
+
+  const statuses = await page.evaluate(
+    async ({ email }) => {
+      const result: number[] = [];
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const response = await fetch('/api/auth/sign-in/email', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email, password: 'WrongPassword!999' }),
+        });
+        result.push(response.status);
+      }
+      return result;
+    },
+    { email },
+  );
+
+  expect(statuses).toEqual([401, 401, 429, 429]);
+  expect(authRequestIps.length).toBeGreaterThan(0);
+  expect(new Set(authRequestIps)).toEqual(new Set([clientIp]));
 });

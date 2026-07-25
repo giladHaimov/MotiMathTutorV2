@@ -1,24 +1,33 @@
-import { createHash } from 'node:crypto';
 import { test as base, expect } from '@playwright/test';
+
+const TESTS_PER_WORKER = 15;
+let testContextIndex = 0;
+
+export function clientIpForTest(workerIndex: number, contextIndex: number): string {
+  const host = workerIndex * TESTS_PER_WORKER + contextIndex + 1;
+  if (host > 254) {
+    throw new Error(
+      `E2E client IP pool exhausted at worker ${workerIndex}, context ${contextIndex}`,
+    );
+  }
+  return `198.51.100.${host}`;
+}
 
 /**
  * Playwright fixture that gives each test a unique client IP via
  * `X-Forwarded-For`. Production keeps Better Auth's default sign-up/sign-in
  * rate limits; E2E isolation must not weaken those limits.
  */
-export const test = base.extend({
-  page: async ({ page }, use, testInfo) => {
-    const seed = [
-      testInfo.workerIndex,
-      testInfo.parallelIndex,
-      testInfo.retry,
-      ...testInfo.titlePath,
-    ].join('|');
-    const digest = createHash('sha256').update(seed).digest();
-    // Documentation TEST-NET-2 range — unique per test, never a production client.
-    const ip = `198.51.${digest[0]}.${(digest[1]! % 254) + 1}`;
-    await page.setExtraHTTPHeaders({ 'x-forwarded-for': ip });
-    await use(page);
+export const test = base.extend<{ clientIp: string }>({
+  clientIp: async (_fixtures, use, testInfo) => {
+    const ip = clientIpForTest(testInfo.workerIndex, testContextIndex);
+    testContextIndex += 1;
+    await use(ip);
+  },
+  // Supplying this as a context option applies it before Playwright creates the
+  // page and keeps it on navigations, fetches, and context.request calls.
+  extraHTTPHeaders: async ({ clientIp }, use) => {
+    await use({ 'x-forwarded-for': clientIp });
   },
 });
 

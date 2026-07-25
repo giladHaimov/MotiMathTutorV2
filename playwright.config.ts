@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Browser E2E against the REAL API + PostgreSQL (no mocks). The Fastify server
  * serves the built SPA and the API on one origin, matching production.
  */
-const PORT = 8080;
+const PORT = 8181;
 const BASE_URL = `http://localhost:${PORT}`;
 
 const env = {
@@ -36,7 +36,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'node --import tsx apps/api/src/server.ts',
-    url: `${BASE_URL}/health`,
+    url: `http://127.0.0.1:${PORT}/health`,
     timeout: 60_000,
     reuseExistingServer: !process.env.CI,
     env,
