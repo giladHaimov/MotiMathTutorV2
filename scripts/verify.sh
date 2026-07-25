@@ -54,15 +54,19 @@ npm run db:seed
 log "Integration + invariant tests"
 npm run test:integration
 
-# 5. Realistic Playwright scenarios against the real API + DB (builds the web SPA).
+# 5. Long, stateful real-PostgreSQL user journeys (kept out of the fast gate).
+log "Long-running backend scenario catalog"
+npm run test:scenarios
+
+# 6. Realistic Playwright scenarios against the real API + DB (builds the web SPA).
 log "Playwright E2E"
 npm run test:e2e
 
-# 6. Production web build (explicit).
+# 7. Production web build (explicit).
 log "Production build"
 npm run build
 
-# 7. Capacitor packaging smoke (AC-046 / AC-047).
+# 8. Capacitor packaging smoke (AC-046 / AC-047).
 log "Capacitor Android smoke (AC-046)"
 bash scripts/capacitor-android-smoke.sh
 
@@ -71,7 +75,7 @@ log "Capacitor iOS smoke (AC-047)"
 # ALLOW_IOS_SMOKE_SKIP=1 explicitly — that is a documented skip, never a PASS.
 bash scripts/capacitor-ios-smoke.sh
 
-# 8. Container build + smoke + restart persistence.
+# 9. Container build + smoke + restart persistence.
 log "Docker image build (no cache)"
 docker compose build --no-cache app
 

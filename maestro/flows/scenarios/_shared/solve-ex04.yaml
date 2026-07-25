@@ -1,0 +1,20 @@
+appId: com.reasoningtutor.app
+androidWebViewHierarchy: devtools
+---
+- tapOn: 'token-ex04-c0-whole'
+- tapOn: 'assign-WHOLE'
+- tapOn: 'Continue'
+- tapOn: 'token-ex04-c1-percent'
+- tapOn: 'assign-PART_IN_PERCENTAGE'
+- tapOn: 'Continue'
+- tapOn: 'token-ex04-c2-unknown'
+- tapOn: 'assign-UNKNOWN'
+- scrollUntilVisible:
+    element:
+      text: 'final-answer-input'
+    direction: DOWN
+- tapOn: 'final-answer-input'
+- inputText: '12'
+- hideKeyboard
+- tapOn: 'Submit answer'
+- assertVisible: 'Session complete.'

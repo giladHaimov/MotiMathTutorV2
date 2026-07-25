@@ -1,0 +1,31 @@
+appId: com.reasoningtutor.app
+name: JS-15 app process kill and authoritative EX-01 resume
+tags: [long-scenario]
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn: 'start-session'
+- tapOn: 'token-ex01-c0-whole'
+- tapOn: 'assign-WHOLE'
+- assertVisible: 'state-version-1'
+- stopApp
+- launchApp
+- tapOn: 'resume-session'
+- assertVisible: 'state-version-1'
+- assertVisible: '40 students'
+- tapOn: 'Continue'
+- tapOn: 'token-ex01-c1-percent'
+- tapOn: 'assign-PART_IN_PERCENTAGE'
+- tapOn: 'Continue'
+- tapOn: 'token-ex01-c2-unknown'
+- tapOn: 'assign-UNKNOWN'
+- scrollUntilVisible:
+    element: 'final-answer-input'
+    direction: DOWN
+- tapOn: 'final-answer-input'
+- inputText: '12'
+- hideKeyboard
+- tapOn: 'Submit answer'
+- assertVisible: 'Session complete.'
+- takeScreenshot: js-15-resumed-complete

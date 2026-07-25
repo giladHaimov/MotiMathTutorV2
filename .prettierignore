@@ -1,1 +1,17 @@
-gilad - what to do now.md
+# generated / synced capacitor assets
+apps/web/android/app/src/main/assets/**
+apps/web/ios/App/App/public/**
+apps/web/ios/App/Pods/**
+apps/web/**/capacitor.config.json
+apps/web/**/capacitor.plugins.json
+
+apps/api/src/db/schema/auth-schema.ts
+apps/web/ios/App/App/Assets.xcassets/**
+
+# generated migration metadata
+db/migrations/meta/**
+
+# governance + notes (authored, not code)
+*.md
+design-docs/**
+.claude/**

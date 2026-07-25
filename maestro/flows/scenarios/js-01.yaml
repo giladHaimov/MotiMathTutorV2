@@ -1,0 +1,37 @@
+appId: com.reasoningtutor.app
+name: JS-01 auth boundaries and exact EX-01 resume
+tags: [long-scenario]
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn: 'start-session'
+- tapOn: 'token-ex01-c0-whole'
+- tapOn: 'assign-WHOLE'
+- assertVisible: 'state-version-1'
+- tapOn: 'Log out'
+- assertVisible: 'auth-view'
+- tapOn: 'email'
+- inputText: '${TEST_EMAIL}'
+- tapOn: 'password'
+- inputText: '${TEST_PASSWORD}'
+- hideKeyboard
+- tapOn: 'submit-auth'
+- tapOn: 'resume-session'
+- assertVisible: 'state-version-1'
+- assertVisible: '40 students'
+- tapOn: 'Continue'
+- tapOn: 'token-ex01-c1-percent'
+- tapOn: 'assign-PART_IN_PERCENTAGE'
+- tapOn: 'Continue'
+- tapOn: 'token-ex01-c2-unknown'
+- tapOn: 'assign-UNKNOWN'
+- scrollUntilVisible:
+    element: 'final-answer-input'
+    direction: DOWN
+- tapOn: 'final-answer-input'
+- inputText: '12'
+- hideKeyboard
+- tapOn: 'Submit answer'
+- assertVisible: 'Session complete.'
+- takeScreenshot: js-01-complete

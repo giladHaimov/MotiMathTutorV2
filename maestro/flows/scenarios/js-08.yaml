@@ -1,0 +1,21 @@
+appId: com.reasoningtutor.app
+name: JS-08 EX-01 structural errors and explicit delete recovery
+tags: [long-scenario]
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn: 'start-session'
+- tapOn: 'token-ex01-c0-whole'
+- tapOn: 'assign-PART_IN_NUMBER'
+- assertVisible: 'state-version-0'
+- tapOn: 'token-ex01-c0-whole'
+- tapOn: 'assign-WHOLE'
+- tapOn: 'Continue'
+- tapOn: 'token-ex01-c1-percent'
+- tapOn: 'assign-WHOLE'
+- assertVisible:
+    text: '.*invalid|.*delete|.*occupied.*'
+- tapOn: 'Delete'
+- runFlow: _shared/solve-ex01.yaml
+- takeScreenshot: js-08-recovered

@@ -1,0 +1,23 @@
+appId: com.reasoningtutor.app
+name: JS-10 premature recovery across ratio and fraction
+tags: [long-scenario]
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex01.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- assertVisible: 'Red and blue marbles are in the ratio 2:3.'
+- assertNotVisible: 'final-answer-input'
+- runFlow: _shared/solve-ex02.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex04.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- assertVisible: 'Dana read three fifths'
+- assertNotVisible: 'final-answer-input'
+- runFlow: _shared/solve-ex03.yaml
+- takeScreenshot: js-10-premature-recovery-complete

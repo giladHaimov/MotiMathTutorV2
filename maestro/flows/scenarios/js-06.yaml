@@ -1,0 +1,34 @@
+appId: com.reasoningtutor.app
+name: JS-06 mixed outcomes in deterministic order
+tags: [long-scenario]
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex01.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- assertVisible: 'Red and blue marbles are in the ratio 2:3.'
+- assertNotVisible: 'final-answer-input'
+- runFlow: _shared/solve-ex02.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- tapOn: 'token-ex04-c0-whole'
+- tapOn: 'assign-WHOLE'
+- tapOn: 'Continue'
+- tapOn: 'token-ex04-c1-percent'
+- tapOn: 'assign-WHOLE'
+- assertVisible:
+    text: '.*invalid|.*delete|.*occupied.*'
+- tapOn: 'Delete'
+- tapOn: 'token-ex04-c1-percent'
+- tapOn: 'assign-WHOLE'
+- assertVisible: '40 students'
+- assertVisible:
+    text: '.*delete|.*rebuild.*'
+- runFlow: _shared/solve-ex04.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex03.yaml
+- takeScreenshot: js-06-mixed-complete

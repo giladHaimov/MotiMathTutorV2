@@ -1,0 +1,19 @@
+appId: com.reasoningtutor.app
+name: JS-05 deterministic four-problem mastery order
+tags: [long-scenario]
+androidWebViewHierarchy: devtools
+---
+- runFlow:
+    file: ../_shared/login.yaml
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex01.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex02.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex04.yaml
+- tapOn: 'Back to dashboard'
+- tapOn: 'start-session'
+- runFlow: _shared/solve-ex03.yaml
+- takeScreenshot: js-05-all-canonical-complete

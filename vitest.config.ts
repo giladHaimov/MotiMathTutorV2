@@ -40,6 +40,25 @@ export default defineConfig({
           setupFiles: ['tests/integration/setup-env.ts'],
         },
       },
+      {
+        test: {
+          name: 'scenarios',
+          globals: true,
+          environment: 'node',
+          include: ['tests/scenarios/backend/**/*.test.ts'],
+          exclude: ['**/node_modules/**', '**/dist/**'],
+          fileParallelism: false,
+          maxWorkers: 1,
+          pool: 'forks',
+          poolOptions: {
+            forks: { singleFork: true },
+          },
+          hookTimeout: 120_000,
+          testTimeout: 120_000,
+          globalSetup: ['tests/integration/global-setup.ts'],
+          setupFiles: ['tests/integration/setup-env.ts'],
+        },
+      },
     ],
   },
 });

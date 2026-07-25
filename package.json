@@ -21,6 +21,7 @@
     "build": "npm run build --workspace @app/web",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:scenarios": "vitest run --project scenarios",
     "test:e2e": "npm run build --workspace @app/web && playwright test",
     "cap:sync": "npm run cap:sync --workspace @app/web",
     "cap:dev": "npm run cap:dev --workspace @app/web",
