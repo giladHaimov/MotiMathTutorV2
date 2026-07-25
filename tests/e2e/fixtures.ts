@@ -19,7 +19,7 @@ export function clientIpForTest(workerIndex: number, contextIndex: number): stri
  * rate limits; E2E isolation must not weaken those limits.
  */
 export const test = base.extend<{ clientIp: string }>({
-  clientIp: async (_fixtures, use, testInfo) => {
+  clientIp: async ({}, use, testInfo) => {
     const ip = clientIpForTest(testInfo.workerIndex, testContextIndex);
     testContextIndex += 1;
     await use(ip);
