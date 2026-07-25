@@ -1,3 +1,34 @@
+DO $$
+DECLARE
+	existing_tables text[];
+BEGIN
+	SELECT array_agg(table_name ORDER BY table_name)
+	INTO existing_tables
+	FROM unnest(ARRAY[
+		'auth_accounts',
+		'auth_sessions',
+		'auth_users',
+		'auth_verifications',
+		'chunks',
+		'learning_events',
+		'learning_sessions',
+		'misconception_classes',
+		'problems',
+		'programs',
+		'rollback_logs',
+		'rollback_rules',
+		'stage_attempts',
+		'user_profiles'
+	]) AS target(table_name)
+	WHERE to_regclass(format('%I.%I', current_schema(), table_name)) IS NOT NULL;
+
+	IF existing_tables IS NOT NULL THEN
+		RAISE EXCEPTION 'Refusing to apply initial migration: target tables already exist: %',
+			array_to_string(existing_tables, ', ');
+	END IF;
+END
+$$;
+--> statement-breakpoint
 CREATE TABLE "auth_accounts" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -232,4 +263,8 @@ CREATE INDEX "rollback_rules_problem_code_idx" ON "rollback_rules" USING btree (
 CREATE UNIQUE INDEX "stage_attempts_session_client_uq" ON "stage_attempts" USING btree ("session_id","client_action_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "stage_attempts_session_sequence_uq" ON "stage_attempts" USING btree ("session_id","sequence_no");--> statement-breakpoint
 CREATE INDEX "stage_attempts_session_created_idx" ON "stage_attempts" USING btree ("session_id","created_at");--> statement-breakpoint
-CREATE INDEX "stage_attempts_misconception_created_idx" ON "stage_attempts" USING btree ("misconception_code","created_at");
+CREATE INDEX "stage_attempts_misconception_created_idx" ON "stage_attempts" USING btree ("misconception_code","created_at");--> statement-breakpoint
+INSERT INTO "programs" ("id","slug","name","version","status") VALUES ('00000000-0000-4000-8000-000000000001','bootstrap','Initial bootstrap data',1,'DRAFT');--> statement-breakpoint
+-- BEGIN GENERATED PROBLEMS BOOTSTRAP
+INSERT INTO "problems" ("id","program_id","problem_key","version","domain","title","difficulty_level","full_text","definition","status") VALUES ('00000000-0000-4000-8000-000000000101','00000000-0000-4000-8000-000000000001','BOOTSTRAP-01',1,'PERCENT','Bootstrap percentage problem',1,'A quantity is 25 percent of 80. What is the quantity?','{"expected_final_result":{"unit":"items","value":"20"},"workspace_slots":["WHOLE","PART_IN_PERCENTAGE","UNKNOWN"],"assignable":[],"invalid_assignments":[],"fact_establishments":[],"sufficiency_dependencies":[],"gates":[],"completion_rule":{"requires_slots_filled":[]}}'::jsonb,'DRAFT');
+-- END GENERATED PROBLEMS BOOTSTRAP
