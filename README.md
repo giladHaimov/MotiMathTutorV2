@@ -1,6 +1,6 @@
 # Commitment-Gated Word Problem Tutor
 
-> A cloud reasoning engine that teaches students to *structure* math word problems before they solve them.
+> A cloud reasoning engine that teaches students to _structure_ math word problems before they solve them.
 
 [![Status](https://img.shields.io/badge/status-MVP%20in%20development-orange)](#project-status)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)](#tech-stack)
@@ -62,14 +62,14 @@ Answer checking cannot fix any of these, because it inspects the output rather t
 
 A walkthrough of canonical example **EX-01**.
 
-> *"A class has 40 students. Thirty percent wear glasses. How many students wear glasses?"*
+> _"A class has 40 students. Thirty percent wear glasses. How many students wear glasses?"_
 
-| Step | Visible to student | Required commitment | Engine behavior |
-|------|--------------------|---------------------|-----------------|
-| 1 | `A class has 40 students.` | Assign `40 students` to the **Whole** slot | Valid. Chunk 2 unlocks |
-| 2 | `Thirty percent wear glasses.` | Assign `30%` to **Part in percentage**, identify the subset | Placing `30%` in Whole is rejected and blocks progression |
-| 3 | `How many students wear glasses?` | Mark the unknown as **Part in number** | Structure is now complete, solution is permitted |
-| 4 | Solution stage | Compute | `12 students` |
+| Step | Visible to student                | Required commitment                                         | Engine behavior                                           |
+| ---- | --------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- |
+| 1    | `A class has 40 students.`        | Assign `40 students` to the **Whole** slot                  | Valid. Chunk 2 unlocks                                    |
+| 2    | `Thirty percent wear glasses.`    | Assign `30%` to **Part in percentage**, identify the subset | Placing `30%` in Whole is rejected and blocks progression |
+| 3    | `How many students wear glasses?` | Mark the unknown as **Part in number**                      | Structure is now complete, solution is permitted          |
+| 4    | Solution stage                    | Compute                                                     | `12 students`                                             |
 
 If the student instead places `40 students` in **Part in number** and later tries `30%` in **Whole** (example EX-04), both assignments are rejected as structurally inconsistent, the misconception class is recorded, and progression stays blocked until the conflicting assignments are **explicitly deleted**. Nothing is silently auto corrected.
 
@@ -79,13 +79,13 @@ If the student instead places `40 students` in **Part in number** and later trie
 
 The engine is five cooperating layers.
 
-| Layer | Responsibility |
-|-------|----------------|
-| **1. Semantic Chunk Engine** | Partitions a problem into ordered semantic units: quantitative expression, entity reference, relational phrase, event defined subset, unknown designation |
-| **2. Commitment Gated Disclosure** | Holds the next chunk until the current commitment validates. No look ahead, no full problem reveal |
-| **3. Typed Workspace** | Typed slots (Whole, Part in percentage, Part in number, Relational operator, Unknown) with enforced invariants. Conflicts require deletion before progression |
+| Layer                                 | Responsibility                                                                                                                                                                                                 |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Semantic Chunk Engine**          | Partitions a problem into ordered semantic units: quantitative expression, entity reference, relational phrase, event defined subset, unknown designation                                                      |
+| **2. Commitment Gated Disclosure**    | Holds the next chunk until the current commitment validates. No look ahead, no full problem reveal                                                                                                             |
+| **3. Typed Workspace**                | Typed slots (Whole, Part in percentage, Part in number, Relational operator, Unknown) with enforced invariants. Conflicts require deletion before progression                                                  |
 | **4. Premature Commitment Detection** | Maintains a semantic sufficiency model, tracks satisfied dependencies, blocks quantification or relation selection before operands are known, and requires explicit acknowledgment of insufficient information |
-| **5. Adaptive Rollback Controller** | On a detected misconception, rollback depth is chosen by misconception class. Repeated errors increase granularity and modulate strictness |
+| **5. Adaptive Rollback Controller**   | On a detected misconception, rollback depth is chosen by misconception class. Repeated errors increase granularity and modulate strictness                                                                     |
 
 ---
 
@@ -131,16 +131,16 @@ flowchart LR
 
 Defaults from the Product Book, finalized in `ARCHITECTURE.md`.
 
-| Concern | Choice |
-|---------|--------|
-| Language | TypeScript, strict mode, frontend and backend |
-| Shape | Modular monolith, not microservices |
-| Database | PostgreSQL with provider portability (local Postgres or Supabase Postgres) |
-| Contracts | Schema validated request and response contracts (Zod) |
-| Auth | Proven authentication provider, JWT bearer tokens |
-| Mobile | Web UI wrapped with Capacitor for Android and iOS |
-| Config | One validated configuration module backed by environment variables |
-| Deploy | Containerized backend with health check and reproducible startup |
+| Concern   | Choice                                                                     |
+| --------- | -------------------------------------------------------------------------- |
+| Language  | TypeScript, strict mode, frontend and backend                              |
+| Shape     | Modular monolith, not microservices                                        |
+| Database  | PostgreSQL with provider portability (local Postgres or Supabase Postgres) |
+| Contracts | Schema validated request and response contracts (Zod)                      |
+| Auth      | Proven authentication provider, JWT bearer tokens                          |
+| Mobile    | Web UI wrapped with Capacitor for Android and iOS                          |
+| Config    | One validated configuration module backed by environment variables         |
+| Deploy    | Containerized backend with health check and reproducible startup           |
 
 ---
 
@@ -258,14 +258,14 @@ Every student action is idempotent and version checked.
 
 ### Outcome codes
 
-| Code | HTTP | Meaning |
-|------|------|---------|
-| `ACCEPTED` | 200 | Commitment validated, state advanced |
-| `STALE_STATE_VERSION` | 409 | Client state is behind, refetch and retry |
-| `PREMATURE_COMMITMENT` | 422 | Required dependencies are not yet satisfied |
-| `INVARIANT_VIOLATION` | 422 | Assignment contradicts the typed workspace rules |
-| `DELETION_REQUIRED` | 422 | A conflicting assignment must be deleted before progression |
-| `FORBIDDEN` | 403 | Session does not belong to the authenticated user |
+| Code                   | HTTP | Meaning                                                     |
+| ---------------------- | ---- | ----------------------------------------------------------- |
+| `ACCEPTED`             | 200  | Commitment validated, state advanced                        |
+| `STALE_STATE_VERSION`  | 409  | Client state is behind, refetch and retry                   |
+| `PREMATURE_COMMITMENT` | 422  | Required dependencies are not yet satisfied                 |
+| `INVARIANT_VIOLATION`  | 422  | Assignment contradicts the typed workspace rules            |
+| `DELETION_REQUIRED`    | 422  | A conflicting assignment must be deleted before progression |
+| `FORBIDDEN`            | 403  | Session does not belong to the authenticated user           |
 
 > The payload shapes above are illustrative. The authoritative contracts live in `packages/contracts`.
 
@@ -289,10 +289,10 @@ Every active session persists enough durable state to resume exactly after refre
 
 **Two separate log streams:**
 
-| Stream | Contents |
-|--------|----------|
-| **Learning events** | Structured student actions, outcomes, misconception class, rollback, engine and content versions |
-| **Operational logs** | Action start, completion, duration, failures. No secrets, no unnecessary personal data |
+| Stream               | Contents                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| **Learning events**  | Structured student actions, outcomes, misconception class, rollback, engine and content versions |
+| **Operational logs** | Action start, completion, duration, failures. No secrets, no unnecessary personal data           |
 
 ---
 
@@ -300,12 +300,12 @@ Every active session persists enough durable state to resume exactly after refre
 
 These four examples are product truth. Seed data, fixtures, and tests must preserve their behavior.
 
-| ID | Domain | Structural lesson | Result |
-|----|--------|-------------------|--------|
-| **EX-01** | Percentage | Distinguish Whole from Part in percentage | `12 students` |
-| **EX-02** | Ratio | A ratio without scale cannot produce a number, answering early is a premature commitment | `10 red marbles` |
-| **EX-03** | Fraction | The unknown is the complementary unread part, not the stated fraction | `20 pages remain unread` |
-| **EX-04** | Conflict and rollback | Inconsistent assignments require explicit deletion, repeated equivalent errors trigger deterministic rollback | Blocked until resolved |
+| ID        | Domain                | Structural lesson                                                                                             | Result                   |
+| --------- | --------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| **EX-01** | Percentage            | Distinguish Whole from Part in percentage                                                                     | `12 students`            |
+| **EX-02** | Ratio                 | A ratio without scale cannot produce a number, answering early is a premature commitment                      | `10 red marbles`         |
+| **EX-03** | Fraction              | The unknown is the complementary unread part, not the stated fraction                                         | `20 pages remain unread` |
+| **EX-04** | Conflict and rollback | Inconsistent assignments require explicit deletion, repeated equivalent errors trigger deterministic rollback | Blocked until resolved   |
 
 ---
 
@@ -359,14 +359,14 @@ Release blockers, not preferences.
 
 ## Roadmap
 
-| Phase | Deliverable |
-|-------|-------------|
-| 1 | Pure TypeScript engine, contracts, full unit test suite, no I/O |
-| 2 | Database foundation: schema, migrations, auth, seeded canonical content |
-| 3 | Authenticated action API plus a thin web test UI |
-| 4 | Capacitor mobile builds for Android and iOS |
-| 5 | Analytics layer: premature commitment rate, rollback distribution, time to structural stability, misconception transition matrix, dropout signals |
-| 6 | Domain expansion: algebra, logic, further structured reasoning domains |
+| Phase | Deliverable                                                                                                                                       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Pure TypeScript engine, contracts, full unit test suite, no I/O                                                                                   |
+| 2     | Database foundation: schema, migrations, auth, seeded canonical content                                                                           |
+| 3     | Authenticated action API plus a thin web test UI                                                                                                  |
+| 4     | Capacitor mobile builds for Android and iOS                                                                                                       |
+| 5     | Analytics layer: premature commitment rate, rollback distribution, time to structural stability, misconception transition matrix, dropout signals |
+| 6     | Domain expansion: algebra, logic, further structured reasoning domains                                                                            |
 
 ---
 
