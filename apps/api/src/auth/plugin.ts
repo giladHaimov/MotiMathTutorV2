@@ -29,7 +29,11 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     url: '/api/auth/*',
     async handler(request: FastifyRequest, reply: FastifyReply) {
       const auth = request.server.auth;
-      const url = new URL(request.url, `${request.protocol}://${request.hostname}`);
+      const incomingUrl = new URL(request.url, 'http://internal.invalid');
+      const url = new URL(request.server.appConfig.BETTER_AUTH_URL);
+      url.pathname = incomingUrl.pathname;
+      url.search = incomingUrl.search;
+      url.hash = '';
       const headers = toAuthHeaders(request, request.server.appConfig.TRUSTED_PROXIES);
       const method = request.method.toUpperCase();
       const hasBody = method !== 'GET' && method !== 'HEAD';
@@ -41,13 +45,14 @@ export function registerAuthRoutes(app: FastifyInstance): void {
 
       const response = await auth.handler(webRequest);
       reply.status(response.status);
+      const cookies = response.headers.getSetCookie();
+      if (cookies.length > 0) {
+        reply.header('set-cookie', cookies);
+      }
       response.headers.forEach((value, key) => {
         const lower = key.toLowerCase();
-        if (lower === 'set-cookie') {
-          reply.header('set-cookie', value);
-        } else {
-          reply.header(key, value);
-        }
+        if (lower === 'set-cookie') return;
+        reply.header(key, value);
       });
       const body = await response.text();
       reply.send(body.length > 0 ? body : null);
@@ -69,5 +74,10 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply):
     return reply;
   }
   request.authUser = { id: session.user.id };
-  request.profile = await getOrCreateProfile(db, session.user.id);
+  const profile = await getOrCreateProfile(db, session.user.id);
+  if (profile.status !== 'ACTIVE') {
+    sendError(request, reply, 'FORBIDDEN', 'This profile is not active.');
+    return reply;
+  }
+  request.profile = profile;
 }

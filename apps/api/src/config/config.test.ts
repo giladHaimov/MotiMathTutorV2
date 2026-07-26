@@ -66,6 +66,12 @@ describe('config', () => {
     expect(() => loadConfig(rest)).toThrow(/DATABASE_URL/);
   });
 
+  it('aborts when BETTER_AUTH_URL is missing or invalid', () => {
+    const { BETTER_AUTH_URL: _omit, ...rest } = base;
+    expect(() => loadConfig({ ...rest, NODE_ENV: 'production' })).toThrow(/BETTER_AUTH_URL/);
+    expect(() => loadConfig({ ...base, BETTER_AUTH_URL: 'not a URL' })).toThrow(/BETTER_AUTH_URL/);
+  });
+
   it('redacts secrets in the sanitized view (AC-042)', () => {
     const config = loadConfig({ ...base });
     const safe = sanitizedConfig(config);

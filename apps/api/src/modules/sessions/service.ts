@@ -147,8 +147,17 @@ export async function getSession(
   profile: Profile,
   sessionId: string,
 ): Promise<PublicSession> {
-  const rows = await db.select().from(learningSessions).where(eq(learningSessions.id, sessionId));
+  const rows = await db
+    .select()
+    .from(learningSessions)
+    .where(
+      and(
+        eq(learningSessions.id, sessionId),
+        eq(learningSessions.analyticsSubjectId, profile.analyticsSubjectId),
+      ),
+    );
   const s = rows[0];
+  // Retain an explicit assertion as defense in depth if this query is changed later.
   if (!s || s.analyticsSubjectId !== profile.analyticsSubjectId) {
     // Knowledge of a UUID is never authorization (ARCHITECTURE §11).
     throw new ApiError('NOT_FOUND', 'Session not found.');
@@ -197,7 +206,12 @@ export async function submitAction(
     const locked = await tx
       .select()
       .from(learningSessions)
-      .where(eq(learningSessions.id, sessionId))
+      .where(
+        and(
+          eq(learningSessions.id, sessionId),
+          eq(learningSessions.analyticsSubjectId, profile.analyticsSubjectId),
+        ),
+      )
       .for('update');
     const s = locked[0];
 
@@ -346,7 +360,12 @@ export async function submitAction(
           publicState: publicSession,
           updatedAt: new Date(),
         })
-        .where(eq(learningSessions.id, sessionId));
+        .where(
+          and(
+            eq(learningSessions.id, sessionId),
+            eq(learningSessions.analyticsSubjectId, profile.analyticsSubjectId),
+          ),
+        );
 
       await tx.insert(stageAttempts).values({
         id: attemptId,
@@ -423,7 +442,12 @@ export async function submitAction(
         publicState: publicSession,
         updatedAt: new Date(),
       })
-      .where(eq(learningSessions.id, sessionId));
+      .where(
+        and(
+          eq(learningSessions.id, sessionId),
+          eq(learningSessions.analyticsSubjectId, profile.analyticsSubjectId),
+        ),
+      );
 
     await tx.insert(stageAttempts).values({
       id: attemptId,
