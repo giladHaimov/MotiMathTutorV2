@@ -18,7 +18,7 @@ command -v adb >/dev/null 2>&1 || fail "adb not found; install Android SDK platf
 command -v maestro >/dev/null 2>&1 || fail "maestro not found; install it from https://docs.maestro.dev/getting-started/installing-maestro"
 command -v node >/dev/null 2>&1 || fail "Node.js 20+ is required"
 
-NODE_MAJOR="$(node -p 'Number(process.versions.node.split(\".\")[0])')"
+NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
 [ "$NODE_MAJOR" -ge 20 ] || fail "Node.js 20+ is required"
 
 if [ -n "${ANDROID_SERIAL:-}" ]; then
@@ -42,11 +42,15 @@ node "$ROOT/maestro/scripts/assert-session.mjs" --mode probe --api-base "$HOST_A
 
 echo "mobile:delta: building and syncing Capacitor for $API_BASE"
 (
-  cd "$ROOT"
+  cd "$WEB"
   VITE_CAPACITOR_SERVER_URL="$API_BASE" \
     VITE_CAPACITOR_HTTP_DEV=1 \
     CAPACITOR_PACKAGE_MODE=development \
-    npm run cap:dev
+    npm run build -- --mode development
+  VITE_CAPACITOR_SERVER_URL="$API_BASE" \
+    VITE_CAPACITOR_HTTP_DEV=1 \
+    CAPACITOR_PACKAGE_MODE=development \
+    npx cap sync android
 )
 (
   cd "$ANDROID"
