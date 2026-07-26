@@ -14,7 +14,21 @@ RUN npm ci
 # --- Build the web SPA -----------------------------------------------------
 FROM deps AS build
 WORKDIR /app
+
+# Public Vite build-time configuration supplied by the deployment platform
+# as Docker build arguments. These values are embedded in the web bundle.
+ARG VITE_CAPACITOR_SERVER_URL
+ARG VITE_PRODUCTION_API_ORIGINS
+ENV VITE_CAPACITOR_SERVER_URL=${VITE_CAPACITOR_SERVER_URL}
+ENV VITE_PRODUCTION_API_ORIGINS=${VITE_PRODUCTION_API_ORIGINS}
+
 COPY . .
+
+# Fail before Vite runs if production native configuration was not provided.
+RUN test -n "$VITE_CAPACITOR_SERVER_URL" \
+ && test -n "$VITE_PRODUCTION_API_ORIGINS" \
+ || (echo "Missing required Vite build-time configuration" >&2; exit 1)
+
 RUN npm run build --workspace @app/web
 
 # --- Production runtime ----------------------------------------------------
