@@ -54,17 +54,15 @@ let session = dashboard?.active_session?.session_id
   ? await getActiveSession(api)
   : (await api.request('/api/sessions', { method: 'POST', body: '{}' }, [201])).body;
 
-const assignments = new Map(
-  session.workspace.slots.filter((slot) => slot.token_id).map((slot) => [slot.slot, slot.token_id]),
-);
+const completed = new Set(session.completed_steps.map((step) => step.correct_slot));
 
-if (!assignments.has('WHOLE')) {
+if (!completed.has('WHOLE')) {
   session = await submit(session, 'ASSIGN_SLOT', { slot: 'WHOLE', token_id: 'ex01-c0-whole' });
 }
 if (session.visible_chunks.length < 2) {
   session = await submit(session, 'SUBMIT_COMMITMENT', {});
 }
-if (!session.workspace.slots.some((slot) => slot.slot === 'PART_IN_PERCENTAGE' && slot.token_id)) {
+if (!session.completed_steps.some((step) => step.correct_slot === 'PART_IN_PERCENTAGE')) {
   session = await submit(session, 'ASSIGN_SLOT', {
     slot: 'PART_IN_PERCENTAGE',
     token_id: 'ex01-c1-percent',
@@ -73,7 +71,7 @@ if (!session.workspace.slots.some((slot) => slot.slot === 'PART_IN_PERCENTAGE' &
 if (session.visible_chunks.length < 3) {
   session = await submit(session, 'SUBMIT_COMMITMENT', {});
 }
-if (!session.workspace.slots.some((slot) => slot.slot === 'UNKNOWN' && slot.token_id)) {
+if (!session.completed_steps.some((step) => step.correct_slot === 'UNKNOWN')) {
   session = await submit(session, 'ASSIGN_SLOT', {
     slot: 'UNKNOWN',
     token_id: 'ex01-c2-unknown',

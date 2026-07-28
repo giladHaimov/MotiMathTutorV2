@@ -1,14 +1,11 @@
 appId: com.reasoningtutor.app
 androidWebViewHierarchy: devtools
 ---
-- tapOn: 'token-ex01-c0-whole'
-- tapOn: 'assign-WHOLE'
+- tapOn: 'current-step-option-WHOLE'
 - tapOn: 'Continue'
-- tapOn: 'token-ex01-c1-percent'
-- tapOn: 'assign-PART_IN_PERCENTAGE'
+- tapOn: 'current-step-option-PART_IN_PERCENTAGE'
 - tapOn: 'Continue'
-- tapOn: 'token-ex01-c2-unknown'
-- tapOn: 'assign-UNKNOWN'
+- tapOn: 'current-step-option-UNKNOWN'
 - scrollUntilVisible:
     element:
       text: 'final-answer-input'

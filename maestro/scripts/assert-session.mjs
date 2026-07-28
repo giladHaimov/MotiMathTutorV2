@@ -103,11 +103,11 @@ export async function getActiveSession(api) {
   return session;
 }
 
-function parseExpectedWorkspace(raw) {
+function parseExpectedCompletedSteps(raw) {
   if (!raw) return [];
   return raw.split(',').map((entry) => {
     const separator = entry.indexOf('=');
-    if (separator < 1) fail(`invalid workspace expectation: ${entry}`);
+    if (separator < 1) fail(`invalid completed-step expectation: ${entry}`);
     return [entry.slice(0, separator), entry.slice(separator + 1)];
   });
 }
@@ -149,10 +149,12 @@ async function main() {
       `visible chunk count ${session.visible_chunks?.length}, expected ${args['visible-count']}`,
     );
   }
-  for (const [slot, expectedLabel] of parseExpectedWorkspace(args.workspace)) {
-    const actual = session.workspace?.slots?.find((candidate) => candidate.slot === slot)?.label;
+  for (const [slot, expectedLabel] of parseExpectedCompletedSteps(args.workspace)) {
+    const actual = session.completed_steps?.find(
+      (candidate) => candidate.correct_slot === slot,
+    )?.label;
     if (actual !== expectedLabel)
-      fail(`workspace ${slot}=${String(actual)}, expected ${expectedLabel}`);
+      fail(`completed step ${slot}=${String(actual)}, expected ${expectedLabel}`);
   }
   if (
     args['required-action'] !== undefined &&
