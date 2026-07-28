@@ -134,7 +134,7 @@ export function ProblemView({
               className="step step--completed"
               data-testid={`completed-step-${step.step_pos}`}
             >
-              <strong>{step.label}</strong>
+              <strong>{step.label}</strong>{' '}
               <span data-testid={`completed-step-answer-${step.step_pos}`}>
                 {step.answer_label}
               </span>
