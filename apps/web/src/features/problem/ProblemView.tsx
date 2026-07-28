@@ -136,7 +136,7 @@ export function ProblemView({
             >
               <strong>{step.label}</strong>
               <span data-testid={`completed-step-answer-${step.step_pos}`}>
-                {step.correct_slot}
+                {step.answer_label}
               </span>
               <button
                 type="button"

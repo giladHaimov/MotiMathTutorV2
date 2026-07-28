@@ -6,7 +6,7 @@ import { parseFixture, type ProblemFixture } from '../schema.js';
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'fixtures');
 
 /**
- * Load and validate every canonical fixture file (EX-01..EX-04).
+ * Load and validate every canonical fixture JSON file under fixtures/.
  * Throws before any import if a fixture is invalid (J-11 fail-before-insert).
  */
 export function loadCanonicalFixtures(): ProblemFixture[] {

@@ -1,0 +1,178 @@
+{
+  "program": {
+    "slug": "core-reasoning",
+    "name": "Core Reasoning MVP",
+    "version": 1,
+    "status": "ACTIVE"
+  },
+  "problem": {
+    "problem_key": "EX-ARITH-01",
+    "version": 1,
+    "domain": "PERCENT",
+    "title": "Simple arithmetic set A",
+    "difficulty_level": 1,
+    "full_text": "Five simple arithmetic questions. After all five, submit final answer 100.",
+    "status": "ACTIVE",
+    "definition": {
+      "workspace_slots": [
+        "WHOLE",
+        "PART_IN_PERCENTAGE",
+        "PART_IN_NUMBER",
+        "FRACTION",
+        "RATIO",
+        "RELATIONAL_OPERATOR",
+        "UNKNOWN"
+      ],
+      "steps": [
+        {
+          "step_pos": 1,
+          "token_id": "arith01-q1",
+          "correct_slot": "WHOLE",
+          "requires_revealed_chunk_index": 0,
+          "label": "3² + 10 = ?",
+          "options": [
+            { "slot": "WHOLE", "label": "19" },
+            {
+              "slot": "PART_IN_PERCENTAGE",
+              "label": "16",
+              "misconception_code": "WHOLE_PART_CONFUSION"
+            },
+            {
+              "slot": "PART_IN_NUMBER",
+              "label": "13",
+              "misconception_code": "WHOLE_PART_CONFUSION"
+            },
+            { "slot": "UNKNOWN", "label": "22", "misconception_code": "WHOLE_PART_CONFUSION" }
+          ]
+        },
+        {
+          "step_pos": 2,
+          "token_id": "arith01-q2",
+          "correct_slot": "PART_IN_PERCENTAGE",
+          "requires_revealed_chunk_index": 0,
+          "label": "8 × 3 − 4 = ?",
+          "options": [
+            { "slot": "WHOLE", "label": "24", "misconception_code": "WHOLE_PART_CONFUSION" },
+            { "slot": "PART_IN_PERCENTAGE", "label": "20" },
+            {
+              "slot": "PART_IN_NUMBER",
+              "label": "12",
+              "misconception_code": "WHOLE_PART_CONFUSION"
+            },
+            { "slot": "UNKNOWN", "label": "28", "misconception_code": "WHOLE_PART_CONFUSION" }
+          ]
+        },
+        {
+          "step_pos": 3,
+          "token_id": "arith01-q3",
+          "correct_slot": "PART_IN_NUMBER",
+          "requires_revealed_chunk_index": 0,
+          "label": "15 ÷ 3 + 2 = ?",
+          "options": [
+            { "slot": "WHOLE", "label": "5", "misconception_code": "WHOLE_PART_CONFUSION" },
+            {
+              "slot": "PART_IN_PERCENTAGE",
+              "label": "10",
+              "misconception_code": "WHOLE_PART_CONFUSION"
+            },
+            { "slot": "PART_IN_NUMBER", "label": "7" },
+            { "slot": "UNKNOWN", "label": "17", "misconception_code": "WHOLE_PART_CONFUSION" }
+          ]
+        },
+        {
+          "step_pos": 4,
+          "token_id": "arith01-q4",
+          "correct_slot": "FRACTION",
+          "requires_revealed_chunk_index": 0,
+          "label": "2³ − 1 = ?",
+          "options": [
+            { "slot": "WHOLE", "label": "8", "misconception_code": "WHOLE_PART_CONFUSION" },
+            {
+              "slot": "PART_IN_PERCENTAGE",
+              "label": "5",
+              "misconception_code": "WHOLE_PART_CONFUSION"
+            },
+            { "slot": "FRACTION", "label": "7" },
+            { "slot": "UNKNOWN", "label": "6", "misconception_code": "WHOLE_PART_CONFUSION" }
+          ]
+        },
+        {
+          "step_pos": 5,
+          "token_id": "arith01-q5",
+          "correct_slot": "RATIO",
+          "requires_revealed_chunk_index": 0,
+          "label": "(6 + 4) × 2 = ?",
+          "options": [
+            { "slot": "WHOLE", "label": "12", "misconception_code": "WHOLE_PART_CONFUSION" },
+            {
+              "slot": "PART_IN_PERCENTAGE",
+              "label": "16",
+              "misconception_code": "WHOLE_PART_CONFUSION"
+            },
+            { "slot": "RATIO", "label": "20" },
+            { "slot": "UNKNOWN", "label": "24", "misconception_code": "WHOLE_PART_CONFUSION" }
+          ]
+        }
+      ],
+      "gates": [],
+      "completion_rule": {
+        "requires_slots_filled": [
+          "WHOLE",
+          "PART_IN_PERCENTAGE",
+          "PART_IN_NUMBER",
+          "FRACTION",
+          "RATIO"
+        ]
+      },
+      "expected_final_result": { "value": "100", "unit": "done" }
+    },
+    "chunks": [
+      {
+        "order_index": 0,
+        "chunk_type": "CONTEXT",
+        "content": "Answer each arithmetic question in order. When all five are done, submit final answer 100.",
+        "tokens": [
+          { "token_id": "arith01-q1", "text": "3² + 10 = ?", "role": "QUESTION" },
+          { "token_id": "arith01-q2", "text": "8 × 3 − 4 = ?", "role": "QUESTION" },
+          { "token_id": "arith01-q3", "text": "15 ÷ 3 + 2 = ?", "role": "QUESTION" },
+          { "token_id": "arith01-q4", "text": "2³ − 1 = ?", "role": "QUESTION" },
+          { "token_id": "arith01-q5", "text": "(6 + 4) × 2 = ?", "role": "QUESTION" }
+        ],
+        "semantic_definition": { "kind": "arithmetic_set" }
+      }
+    ]
+  },
+  "misconception_classes": [
+    {
+      "code": "PREMATURE_QUANTIFICATION",
+      "name": "Premature quantification",
+      "description": "A numeric or scale commitment was attempted before the required facts were revealed."
+    },
+    {
+      "code": "WHOLE_PART_CONFUSION",
+      "name": "Whole/part confusion",
+      "description": "A part value was placed where the whole belongs, or vice versa."
+    },
+    {
+      "code": "UNKNOWN_MISIDENTIFICATION",
+      "name": "Unknown misidentification",
+      "description": "The wrong quantity was identified as the unknown."
+    },
+    {
+      "code": "RELATION_WITHOUT_OPERANDS",
+      "name": "Relation without operands",
+      "description": "A relational operator was committed before its operands existed."
+    },
+    {
+      "code": "CONFLICTING_SLOT_ASSIGNMENT",
+      "name": "Conflicting slot assignment",
+      "description": "An assignment conflicts with an existing one and requires explicit deletion."
+    },
+    {
+      "code": "COMPLEMENT_CONFUSION",
+      "name": "Complement confusion",
+      "description": "A part was confused with its complement."
+    }
+  ],
+  "rollback_rules": []
+}

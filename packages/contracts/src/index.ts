@@ -75,12 +75,14 @@ export type VisibleChunk = z.infer<typeof visibleChunkSchema>;
 
 // Ordered, already-answered steps (change-28-jul.txt goal #5: "show all prior
 // answered steps plus the current step"). Never reveals options or misconceptions.
+// `answer_label` is the human-readable chosen option label (slot ids stay internal).
 export const completedStepSchema = z
   .object({
     step_pos: z.number().int().min(1),
     token_id: z.string(),
     label: z.string(),
     correct_slot: slotSchema,
+    answer_label: z.string(),
   })
   .strict();
 export type CompletedStep = z.infer<typeof completedStepSchema>;

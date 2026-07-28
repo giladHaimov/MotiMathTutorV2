@@ -148,7 +148,13 @@ function currentStep(
 export function computeCompletedSteps(
   def: EngineProblemDefinition,
   state: EngineSessionState,
-): Array<{ step_pos: number; token_id: string; label: string; correct_slot: Slot }> {
+): Array<{
+  step_pos: number;
+  token_id: string;
+  label: string;
+  correct_slot: Slot;
+  answer_label: string;
+}> {
   return [...def.steps]
     .filter((s) => {
       const filled = state.workspace.slots.find((w) => w.slot === s.correct_slot);
@@ -160,6 +166,7 @@ export function computeCompletedSteps(
       token_id: s.token_id,
       label: s.label,
       correct_slot: s.correct_slot,
+      answer_label: s.options.find((o) => o.slot === s.correct_slot)?.label ?? s.correct_slot,
     }));
 }
 
