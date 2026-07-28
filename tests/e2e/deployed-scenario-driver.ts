@@ -95,7 +95,8 @@ function durablePublicState(session: PublicSession): unknown {
   return {
     status: session.status,
     visible_chunks: session.visible_chunks,
-    workspace: session.workspace,
+    completed_steps: session.completed_steps,
+    current_step: session.current_step,
     accepted_commitments: session.accepted_commitments,
   };
 }
@@ -107,7 +108,8 @@ function authoritativeLearnerState(session: PublicSession): unknown {
     state_version: session.state_version,
     status: session.status,
     visible_chunks: session.visible_chunks,
-    workspace: session.workspace,
+    completed_steps: session.completed_steps,
+    current_step: session.current_step,
     accepted_commitments: session.accepted_commitments,
     allowed_actions: session.allowed_actions,
     required_next_action: session.required_next_action,
@@ -425,8 +427,9 @@ export class DeployedScenarioDriver {
       await expect(this.page.getByTestId('dashboard')).toBeVisible();
       await this.page.getByTestId('resume-session').click();
       await expect(this.page.getByTestId('problem-screen')).toBeVisible();
-      await this.page.getByTestId(`token-${String(step.payload.token_id)}`).click();
-      await this.page.getByTestId(`assign-${String(step.payload.slot)}`).click();
+      // The UI only offers options for the current step (change-28-jul.txt);
+      // the step's token is implicit, so only the slot selects the option.
+      await this.page.getByTestId(`current-step-option-${String(step.payload.slot)}`).click();
       await expect(this.page.getByTestId('state-version')).toHaveText(
         String(before.state_version + 1),
       );
@@ -563,7 +566,8 @@ export class DeployedScenarioDriver {
     }
     if (step.slot) {
       expect(
-        session.workspace.slots.find((slot) => slot.slot === step.slot!.name)?.token_id,
+        session.completed_steps.find((completed) => completed.correct_slot === step.slot!.name)
+          ?.token_id,
         `${label}: slot ${step.slot.name}`,
       ).toBe(step.slot.tokenId);
     }

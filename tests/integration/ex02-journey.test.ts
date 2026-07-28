@@ -82,7 +82,7 @@ describe('EX-02 ratio journey (real API + PostgreSQL)', () => {
     session = await startSession(user);
     expect(session.visible_chunks).toHaveLength(1);
     expect(session.visible_chunks[0]?.content).toContain('ratio 2:3');
-    expect(session.content_version).toBe(2);
+    expect(session.content_version).toBe(3);
 
     const premature = await act(user, session, 'SUBMIT_FINAL_ANSWER', { value: '10' });
     expect(premature.status).toBe(200);
@@ -140,15 +140,15 @@ describe('EX-02 ratio journey (real API + PostgreSQL)', () => {
     }));
     ({ body: session } = await act(user, session, 'SUBMIT_FINAL_ANSWER', { value: '10' }));
     expect(session.status).toBe('COMPLETED');
-    expect(session.content_version).toBe(2);
+    expect(session.content_version).toBe(3);
   });
 
-  it('EX-02 sessions persist and return content_version = 2 (problem version)', async () => {
+  it('EX-02 sessions persist and return content_version = 3 (problem version)', async () => {
     const user = await registerUser(app);
     let session = await startSession(user);
     await completeEx01(user, session);
     session = await startSession(user);
-    expect(session.content_version).toBe(2);
+    expect(session.content_version).toBe(3);
 
     const [row] = await db
       .select({
@@ -164,13 +164,13 @@ describe('EX-02 ratio journey (real API + PostgreSQL)', () => {
       .from(problems)
       .where(eq(problems.id, row!.problemId));
     expect(problem!.problemKey).toBe('EX-02');
-    expect(problem!.version).toBe(2);
+    expect(problem!.version).toBe(3);
 
     const resumed = await authed(user, {
       method: 'GET',
       url: `/api/sessions/${session.session_id}`,
     });
-    expect((resumed.json() as PublicSession).content_version).toBe(2);
+    expect((resumed.json() as PublicSession).content_version).toBe(3);
   });
 
   it('resumes while acknowledgment is pending (blocked state)', async () => {

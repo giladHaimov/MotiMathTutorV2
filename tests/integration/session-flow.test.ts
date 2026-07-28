@@ -58,7 +58,7 @@ describe('session flow (real API + PostgreSQL)', () => {
     expect(res.statusCode).toBe(200);
     const updated = res.json() as PublicSession;
     expect(updated.state_version).toBe(session.state_version + 1);
-    expect(updated.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe(token);
+    expect(updated.completed_steps.find((s) => s.correct_slot === 'WHOLE')?.token_id).toBe(token);
 
     const attempts = await db
       .select()

@@ -22,9 +22,9 @@ async function startProblem(page: Page): Promise<void> {
   await expect(page.getByTestId('chunk-0')).toBeVisible();
 }
 
-async function assignToken(page: Page, tokenId: string, slot: string): Promise<void> {
-  await page.getByTestId(`token-${tokenId}`).click();
-  await page.getByTestId(`assign-${slot}`).click();
+/** Answer the current step by clicking one of its curated options (change-28-jul.txt). */
+async function answerStep(page: Page, slot: string): Promise<void> {
+  await page.getByTestId(`current-step-option-${slot}`).click();
 }
 
 async function continueWhenReady(page: Page): Promise<void> {
@@ -60,11 +60,11 @@ async function assignViaApi(page: Page, tokenId: string, slot: string): Promise<
 
 async function completeEx01(page: Page): Promise<void> {
   await startProblem(page);
-  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex01-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex01-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('12');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();
@@ -73,11 +73,11 @@ async function completeEx01(page: Page): Promise<void> {
 
 async function completeEx02(page: Page): Promise<void> {
   await startProblem(page);
-  await assignToken(page, 'ex02-c0-ratio', 'RATIO');
+  await answerStep(page, 'RATIO');
   await continueWhenReady(page);
-  await assignToken(page, 'ex02-c1-blue', 'PART_IN_NUMBER');
+  await answerStep(page, 'PART_IN_NUMBER');
   await continueWhenReady(page);
-  await assignToken(page, 'ex02-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('10');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();
@@ -90,43 +90,44 @@ test('SCN-07 EX-04 repeat conflict triggers rollback then recover finish 12', as
   await completeEx01(page);
   await completeEx02(page);
   await startProblem(page);
-  await expect(page.getByTestId('token-ex04-c0-whole')).toBeVisible();
+  await expect(page.getByTestId('current-step')).toContainText('40 students');
 
-  // Place 40 in Part-in-number → rejected/classified.
-  await assignToken(page, 'ex04-c0-whole', 'PART_IN_NUMBER');
+  // Place 40 in Part-in-number → rejected/classified. Stays on step 1.
+  await answerStep(page, 'PART_IN_NUMBER');
   await expect(page.getByTestId('message')).toBeVisible();
-  await expect(page.getByTestId('slot-label-PART_IN_NUMBER')).toHaveCount(0);
+  await expect(page.getByTestId('completed-step-1')).toHaveCount(0);
 
   // Valid Whole → reveal chunk 1.
-  await assignToken(page, 'ex04-c0-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
 
-  // Attempt 30% in Whole while occupied (API — UI has no assign on filled slots).
+  // Attempt 30% in Whole while occupied (API — the UI only exposes options for
+  // the current step, not arbitrary re-targeting of an already-answered slot).
   // Conflict remains: WHOLE still holds 40 students.
   await assignViaApi(page, 'ex04-c1-percent', 'WHOLE');
   await expect(page.getByTestId('message')).toBeVisible();
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
   await expect(page.getByTestId('guidance-code')).toHaveCount(0);
 
-  // Explicit delete, then repeat equivalent error → deterministic rollback.
+  // Explicit delete, then repeat equivalent error via API → deterministic rollback.
   await page.getByTestId('delete-WHOLE').click();
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveCount(0);
+  await expect(page.getByTestId('completed-step-1')).toHaveCount(0);
 
-  await assignToken(page, 'ex04-c1-percent', 'WHOLE');
+  await assignViaApi(page, 'ex04-c1-percent', 'WHOLE');
   await expect(page.getByTestId('guidance-code')).toHaveText('GUIDE_DELETE_CONFLICT');
   await expect(page.getByTestId('message')).toBeVisible();
   await expect(page.getByTestId('chunk-1')).toHaveCount(0);
   await expect(page.getByTestId('chunk-0')).toBeVisible();
 
   // Recover and complete.
-  await assignToken(page, 'ex04-c0-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
-  await assignToken(page, 'ex04-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-2')).toBeVisible();
-  await assignToken(page, 'ex04-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('12');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();

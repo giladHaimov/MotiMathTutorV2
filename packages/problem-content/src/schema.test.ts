@@ -20,27 +20,44 @@ function validFixture(): ProblemFixture {
       status: 'ACTIVE',
       definition: {
         workspace_slots: ['WHOLE', 'PART_IN_PERCENTAGE', 'UNKNOWN'],
-        assignable: [
+        steps: [
           {
+            step_pos: 1,
             token_id: 't-whole',
-            slot: 'WHOLE',
+            correct_slot: 'WHOLE',
             requires_revealed_chunk_index: 0,
             label: '40 students',
+            options: [
+              { slot: 'WHOLE', label: 'Whole' },
+              { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+              { slot: 'UNKNOWN', label: 'Unknown' },
+            ],
           },
           {
+            step_pos: 2,
             token_id: 't-percent',
-            slot: 'PART_IN_PERCENTAGE',
+            correct_slot: 'PART_IN_PERCENTAGE',
             requires_revealed_chunk_index: 1,
             label: '30%',
+            options: [
+              { slot: 'WHOLE', label: 'Whole' },
+              { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+              { slot: 'UNKNOWN', label: 'Unknown' },
+            ],
           },
           {
+            step_pos: 3,
             token_id: 't-unknown',
-            slot: 'UNKNOWN',
+            correct_slot: 'UNKNOWN',
             requires_revealed_chunk_index: 2,
             label: 'glasses wearers',
+            options: [
+              { slot: 'WHOLE', label: 'Whole' },
+              { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+              { slot: 'UNKNOWN', label: 'Unknown' },
+            ],
           },
         ],
-        invalid_assignments: [],
         fact_establishments: [],
         sufficiency_dependencies: [],
         gates: [
@@ -132,42 +149,82 @@ describe('problem fixture gate/content integrity', () => {
     expectReject(raw, /duplicate gate commitment SAME/);
   });
 
-  it('rejects duplicate assignable slot IDs', () => {
+  it('rejects duplicate step correct_slot values', () => {
     const raw = validFixture();
-    raw.problem.definition.assignable[1] = {
+    raw.problem.definition.steps[1] = {
+      step_pos: 2,
       token_id: 't-percent',
-      slot: 'WHOLE',
+      correct_slot: 'WHOLE',
       requires_revealed_chunk_index: 1,
       label: '30%',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+      ],
     };
-    expectReject(raw, /duplicate assignable slot WHOLE/);
+    expectReject(raw, /duplicate step correct_slot WHOLE/);
   });
 
-  it('rejects duplicate assignable token IDs', () => {
+  it('rejects duplicate step token IDs', () => {
     const raw = validFixture();
-    raw.problem.definition.assignable[1] = {
+    raw.problem.definition.steps[1] = {
+      step_pos: 2,
       token_id: 't-whole',
-      slot: 'PART_IN_PERCENTAGE',
+      correct_slot: 'PART_IN_PERCENTAGE',
       requires_revealed_chunk_index: 1,
       label: '30%',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+      ],
     };
-    expectReject(raw, /duplicate assignable token_id t-whole/);
+    expectReject(raw, /duplicate step token_id t-whole/);
   });
 
-  it('rejects gate commitment with no assignable at the prerequisite chunk', () => {
+  it('rejects a step with no option matching correct_slot', () => {
     const raw = validFixture();
-    // Remove the chunk-0 assignable → gate revealing 1 deadlocks.
-    raw.problem.definition.assignable = raw.problem.definition.assignable.filter(
-      (a) => a.requires_revealed_chunk_index !== 0,
+    raw.problem.definition.steps[0] = {
+      ...raw.problem.definition.steps[0]!,
+      options: [
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
+    };
+    expectReject(raw, /must have exactly one option matching correct_slot WHOLE/);
+  });
+
+  it('rejects duplicate option slots within one step', () => {
+    const raw = validFixture();
+    raw.problem.definition.steps[0] = {
+      ...raw.problem.definition.steps[0]!,
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'WHOLE', label: 'Whole again' },
+      ],
+    };
+    expectReject(raw, /has duplicate option slot WHOLE/);
+  });
+
+  it('rejects non-contiguous step_pos', () => {
+    const raw = validFixture();
+    raw.problem.definition.steps[1] = { ...raw.problem.definition.steps[1]!, step_pos: 5 };
+    expectReject(raw, /step_pos must be contiguous from 1/);
+  });
+
+  it('rejects gate commitment with no step at the prerequisite chunk', () => {
+    const raw = validFixture();
+    // Remove the chunk-0 step → gate revealing 1 deadlocks.
+    raw.problem.definition.steps = raw.problem.definition.steps.filter(
+      (s) => s.requires_revealed_chunk_index !== 0,
     );
     // Keep contiguous gates but break the prerequisite link.
-    expectReject(raw, /has no assignable at chunk 0/);
+    expectReject(raw, /has no step at chunk 0/);
   });
 
-  it('rejects assignable reveal index that does not match token chunk position', () => {
+  it('rejects step reveal index that does not match token chunk position', () => {
     const raw = validFixture();
-    raw.problem.definition.assignable[0] = {
-      ...raw.problem.definition.assignable[0]!,
+    raw.problem.definition.steps[0] = {
+      ...raw.problem.definition.steps[0]!,
       requires_revealed_chunk_index: 1, // token lives in chunk 0
     };
     expectReject(raw, /must equal token chunk 0/);

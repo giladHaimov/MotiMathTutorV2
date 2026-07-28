@@ -1,6 +1,8 @@
-import { publicSessionSchema, type PublicSession, type Slot } from '@app/contracts';
+import { publicSessionSchema, type PublicSession } from '@app/contracts';
 import {
+  computeActiveStep,
   computeAllowedActions,
+  computeCompletedSteps,
   computeRequiredNextAction,
   type EngineProblemDefinition,
   type WorkspaceState,
@@ -20,14 +22,13 @@ export interface SerializeInput {
   engineVersion: string;
   contentVersion: number;
   currentChunkIndex: number;
-  workspaceSlots: Slot[];
   workspace: WorkspaceState;
   acceptedCommitments: string[];
   chunks: ChunkRow[];
   message: string | null;
   /** Fixture guidance code when a rollback rule fires; otherwise null. */
   guidanceCode?: string | null;
-  /** Projected problem definition — drives allowed_actions / required_next_action. */
+  /** Projected problem definition — drives allowed_actions / required_next_action / steps. */
   problemDefinition: EngineProblemDefinition;
 }
 
@@ -67,21 +68,18 @@ export function buildPublicSession(input: SerializeInput): PublicSession {
       tokens: c.tokens.map((t) => ({ token_id: t.token_id, text: t.text })),
     }));
 
-  const slots = input.workspaceSlots.map((slot) => {
-    const filled = input.workspace.slots.find((s) => s.slot === slot);
-    return {
-      slot,
-      token_id: filled?.token_id ?? null,
-      label: filled?.label ?? null,
-    };
-  });
+  // Ordered prior-answered steps + the single active step (change-28-jul.txt
+  // goal #5) — never the full slot list, so unreached steps stay hidden.
+  const completedSteps = computeCompletedSteps(input.problemDefinition, engineState);
+  const currentStep = computeActiveStep(input.problemDefinition, engineState);
 
   const publicSession: PublicSession = {
     session_id: input.sessionId,
     state_version: input.stateVersion,
     status: input.status,
     visible_chunks: visibleChunks,
-    workspace: { slots },
+    completed_steps: completedSteps,
+    current_step: currentStep,
     accepted_commitments: input.acceptedCommitments,
     required_next_action: requiredNext,
     allowed_actions: allowedActions,

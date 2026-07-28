@@ -1,0 +1,383 @@
+CHANGE DESIGN DOC — change-28-jul.txt
+Repo: MotiMathTutorV2
+Date: 2026-07-28
+Status: agreed design, not yet implemented
+
+===========================================================================
+0. HOW TO READ THIS DOC
+===========================================================================
+This is a self-contained change spec for a different AI/engineer to implement,
+with no other context than this file plus the repo itself. It supersedes
+nothing else in the repo's design docs (PRODUCT_BOOK.md, design-docs/PRODUCT.md,
+design-docs/ARCHITECTURE.md) — those remain authoritative for everything not
+covered here. This change is intentionally MINIMAL and narrow: it does NOT
+implement the full "req doc.pdf" specification (see §8 "Explicitly out of
+scope" and the existing file cc_diff.txt in the repo root, which documents the
+full gap and a much larger multi-slice plan). This doc is the smallest correct
+step toward that larger picture.
+
+Per repo CLAUDE.md: read PRODUCT_BOOK.md, PRODUCT.md, ARCHITECTURE.md,
+ACCEPTANCE.md, AGENTS.md, and the relevant Slice before coding. Run
+`npm run verify` before committing. Do not weaken verification. Stop after two
+failed repair attempts of the same root cause and ask for help instead of
+continuing to patch.
+
+===========================================================================
+1. GOAL — target runtime behavior
+===========================================================================
+For every problem, at minimum, the app must:
+
+1. Know the **ordered** steps of the problem (explicit position 1, 2, 3, ...).
+2. Show step 1 first; the student answers only that step.
+3. Server already knows the correct answer for the step and validates against
+   it.
+4. Wrong answer -> show an error message, stay on the same step, let the
+   student try again (no progression).
+5. Correct answer, not the last step -> advance to the next step. The screen
+   shows, in order, every previously-answered (correct) step **plus** the new
+   current step. Steps not yet reached are never shown.
+6. Correct answer on the **last** step -> do not advance to another step;
+   instead show a "problem completed" success notification.
+7. Every step has a known, authored set of selectable answer options shown to
+   the user (not free text); the server knows which option is correct and
+   never leaks that to the client before submission.
+
+===========================================================================
+2. CURRENT STATE (as of this repo, before this change)
+===========================================================================
+There is no explicit "step" entity or step order today. The relevant current
+model:
+
+- `apps/api/src/db/schema/product.ts` — `problems.definition` is one JSONB
+  blob per problem version containing: `workspace_slots` (a small fixed global
+  list of slot types, e.g. WHOLE / PART_PCT / PART_NUM / UNKNOWN, shared by the
+  whole problem), `assignable` (array of `{ token_id, slot, label,
+  requires_revealed_chunk_index }` — this is today's closest thing to a
+  "step": for a given token, `slot` is the one correct slot), `invalid_assignments`
+  (array of `{ token_id, slot, misconception_code }` — only SOME wrong
+  token/slot pairs are pre-classified), `gates`, `completion_rule`,
+  `expected_final_result`.
+- `packages/problem-content/src/schema.ts` — Zod schema + validation for the
+  above fixture format (`assignableSchema`, `invalidAssignmentSchema`,
+  `definitionSchema`, `problemFixtureSchema`). This is the authoring/import-time
+  validator (see `apps/api/src/modules/content/importer.ts`).
+- `packages/engine/src/index.ts` — `computeAllowedActions` /
+  `computeRequiredNextAction` / `hasReachableEmptyAssignable` /
+  `assignSlot`: today ANY reachable-and-still-empty assignable is fillable at
+  once — there is no concept of "exactly one active step." Correctness is
+  already validated server-side inside `assignSlot` (checks `invalid_assignments`
+  then `assignable`), and rejection returns to the same state via
+  `rejectFrom(...)` with a message + optional misconception code — this part
+  already satisfies goal #3/#4 above and needs no behavior change, only
+  re-scoping to "one step at a time."
+- `apps/api/src/modules/sessions/serializer.ts` — `buildPublicSession(...)`:
+  exposes `visible_chunks` filtered to `orderIndex <= currentChunkIndex`
+  (this progressive-reveal-by-chunk pattern already matches goal #5 and should
+  be mirrored for steps), and exposes `workspace.slots` = **every** slot in
+  `workspace_slots`, filled or not — i.e. today it does NOT hide not-yet-
+  reachable slots; this must change per goal #5/#7.
+- `apps/api/src/modules/sessions/service.ts` — orchestrates attempts against
+  `learning_sessions` (see schema, has `currentChunkIndex`, `workspaceState`,
+  `requiredNextAction`, `publicState` jsonb columns) and `stage_attempts`.
+
+Confirmed by direct grep of the repo: no `steps`, `step_transitions`, or
+`remediation` entities exist anywhere in code today.
+
+No new DB tables or migrations are required for this change — `problems.definition`
+is already a JSONB column, so all data-shape changes below live inside it.
+
+===========================================================================
+3. DATA MODEL CHANGE — fixture JSON shape
+===========================================================================
+Within `problems.definition`, replace the flat `assignable` array with an
+explicitly ordered, self-contained step array. Key renames/additions vs. today:
+
+  - `slot` (root of each assignable entry) is renamed to `correct_slot` for
+    clarity (it always was the correct answer for that token; the old name
+    was ambiguous next to the new `options[].slot` values).
+  - add `step_pos`: integer, 1-based, unique and contiguous per problem
+    version (1, 2, 3, ... N — no gaps, no duplicates).
+  - add `options`: the authored, per-step answer set shown to the student.
+    Each option has its own `slot` (a value from the shared `workspace_slots`
+    enum, reused as the option's semantic identity) + `label` (display text)
+    + optional `misconception_code` (set on every WRONG option so all
+    incorrect choices are classified — this also closes today's gap where
+    only some wrong combinations were pre-classified via
+    `invalid_assignments`).
+  - Exactly one entry in `options` must have `slot === correct_slot`.
+
+BEFORE (today):
+```jsonc
+{
+  "workspace_slots": ["WHOLE", "PART_PCT", "PART_NUM", "UNKNOWN"],
+  "assignable": [
+    {
+      "token_id": "students_80",
+      "slot": "WHOLE",
+      "label": "80 students",
+      "requires_revealed_chunk_index": 0
+    }
+  ],
+  "invalid_assignments": [
+    { "token_id": "students_80", "slot": "PART_PCT", "misconception_code": "WHOLE_PART_CONFUSION" }
+  ]
+}
+```
+
+AFTER (this change):
+```jsonc
+{
+  "workspace_slots": ["WHOLE", "PART_PCT", "PART_NUM", "UNKNOWN"],
+  "steps": [
+    {
+      "step_pos": 1,
+      "token_id": "students_80",
+      "correct_slot": "WHOLE",
+      "label": "80 students",
+      "requires_revealed_chunk_index": 0,
+      "options": [
+        { "slot": "WHOLE", "label": "Whole" },
+        { "slot": "PART_PCT", "label": "Percentage part", "misconception_code": "WHOLE_PART_CONFUSION" },
+        { "slot": "PART_NUM", "label": "Numeric part", "misconception_code": "WHOLE_NUMPART_CONFUSION" },
+        { "slot": "UNKNOWN", "label": "Unknown" }
+      ]
+    }
+  ]
+}
+```
+Notes:
+  - `assignable` and `invalid_assignments` are superseded by `steps[].options`
+    and are removed from the fixture format (this is a breaking fixture-format
+    change — all existing fixture files must be migrated, see §6).
+  - `workspace_slots` stays as the enum of valid slot identities (used for
+    validating `correct_slot`/`options[].slot` values), but is no longer
+    serialized to the client as a flat always-visible list (see §4.3).
+  - `gates`, `completion_rule`, `expected_final_result`,
+    `fact_establishments`, `sufficiency_dependencies` are UNCHANGED by this
+    doc.
+
+===========================================================================
+4. FILE-BY-FILE CHANGES
+===========================================================================
+
+4.1 `packages/problem-content/src/schema.ts`
+  - Remove `assignableSchema` / `invalidAssignmentSchema` (or keep internally
+    only if still needed elsewhere — check usages first).
+  - Add:
+    ```ts
+    export const stepOptionSchema = z.object({
+      slot: slotSchema,
+      label: z.string().min(1),
+      misconception_code: z.string().min(1).optional(),
+    }).strict();
+
+    export const stepSchema = z.object({
+      step_pos: z.number().int().min(1),
+      token_id: z.string().min(1),
+      correct_slot: slotSchema,
+      label: z.string().min(1),
+      requires_revealed_chunk_index: z.number().int().min(0),
+      options: z.array(stepOptionSchema).min(2),
+    }).strict();
+    ```
+  - `definitionSchema`: replace `assignable` + `invalid_assignments` fields
+    with `steps: z.array(stepSchema).min(1)`.
+  - Extend the existing `problemFixtureSchema.superRefine(...)` validation
+    (currently checks chunk ordering, token uniqueness, gate contiguity,
+    fact/sufficiency references — keep all of that) to additionally check:
+    - `step_pos` values are unique and contiguous starting at 1 across
+      `steps`.
+    - For every step, exactly one entry in `options` has
+      `slot === correct_slot`.
+    - Every non-correct option should generally carry a
+      `misconception_code` (warn or error — team's choice; recommend making
+      it a hard error to keep the "every wrong answer classified" guarantee).
+    - No duplicate `slot` values within one step's `options` array.
+    - `token_id` referenced by each step must exist in some chunk (mirrors
+      the existing `assignable` check that is being replaced).
+    - Existing checks tied to old `assignable`/`invalid_assignments`
+      (duplicate assignable token ids, duplicate assignable slots, reveal
+      index consistency, gate-prerequisite-has-assignable check) must be
+      ported to operate on `steps` instead.
+
+4.2 `packages/engine/src/index.ts`
+  - Replace `hasReachableEmptyAssignable` with a `currentStep(def, state)`
+    helper that returns the single step with the lowest `step_pos` not yet
+    marked completed in session state (see §4.4 for where "completed" is
+    tracked). This is the one and only actionable step.
+  - `computeAllowedActions`: if a current step exists and its
+    `requires_revealed_chunk_index <= current_chunk_index`, allow
+    `ASSIGN_SLOT` (or rename the action type to something like
+    `ANSWER_STEP` if you want to make the step-based model explicit — pick
+    one, document it in packages/contracts, keep it consistent everywhere).
+    No other assignment action should be allowed concurrently.
+  - `computeRequiredNextAction`: return the current step's identity
+    (`step_pos` and/or `token_id`) alongside the action type, so client and
+    server agree on exactly which step is active — today it only returns an
+    action_type with no target, which is insufficient once multiple steps
+    can exist per chunk.
+  - `assignSlot` (or its renamed equivalent): validate the submitted answer
+    against `currentStep(...).correct_slot` (and, for feedback purposes,
+    look up the chosen wrong option in `currentStep(...).options` to surface
+    its `misconception_code`) instead of scanning `invalid_assignments` +
+    `assignable` globally. Reject if the action targets any step other than
+    the current one (defend against a stale/out-of-order client request).
+  - On success: mark the step completed (see §4.4), and if it was the step
+    with the highest `step_pos` (i.e., the last step), signal problem
+    completion instead of computing a next current step.
+
+4.3 `apps/api/src/modules/sessions/serializer.ts`
+  - Remove the current `slots = input.workspaceSlots.map(...)` block that
+    exposes every slot (filled or not) regardless of reach.
+  - Add to `PublicSession`:
+    - `completed_steps`: ordered array (by `step_pos` ascending) of every
+      step the student has already answered correctly — each with at least
+      `step_pos`, `label`, and the option they chose (or just `correct_slot`,
+      since it's now known-correct).
+    - `current_step`: the single active step — `step_pos`, `label`,
+      `options` (full option list, `misconception_code` values excluded from
+      the wire payload — those are server-internal until an answer is
+      submitted), or `null` if the problem is complete.
+  - Keep `visible_chunks` behavior unchanged (already correct — mirrors the
+    same "show completed + current, hide future" pattern this change brings
+    to steps).
+  - Ensure no field on `current_step`/`options` reveals which option is
+    correct (mirror the existing "no correct-answer leakage" guarantee for
+    chunks/gates).
+
+4.4 `apps/api/src/modules/sessions/service.ts` + `repo.ts`
+  - `learning_sessions` already has `workspaceState` (jsonb) and
+    `requiredNextAction` (jsonb) columns — no new DB columns are required;
+    store step completion inside `workspaceState` (e.g. add a
+    `completed_step_positions: number[]` field there, or a
+    `current_step_pos: number` field — pick one canonical representation and
+    thread it through `service.ts`/`repo.ts`/`serializer.ts` consistently).
+  - On a correct submission: append the answered `step_pos` to
+    `completed_step_positions`; recompute `current_step_pos` as the next
+    lowest uncompleted `step_pos`.
+  - If there is no next step (the one just answered was the max `step_pos`
+    for the problem): set session `status = 'COMPLETED'`, set
+    `completedAt`, and ensure the response/public state signals problem
+    completion distinctly from "advance to next step" (e.g. `current_step:
+    null` + a `status: 'COMPLETED'` + a completion message) so the client can
+    render the success notification described in goal #6.
+  - Keep existing idempotency (`clientActionId`) and append-only
+    `stage_attempts` behavior unchanged — just make sure the attempt record
+    also captures which `step_pos` it was against (add a `step_pos` field to
+    the attempt payload/columns if convenient — optional nice-to-have, not
+    required for this minimal change, but recommended for future analytics;
+    if added, needs a small migration on `stage_attempts`, otherwise skip to
+    keep this a no-migration change).
+
+4.5 `packages/contracts/src/index.ts`
+  - Update `PublicSession` (and any `ActionType` enum) to match the new
+    shape: `completed_steps`, `current_step` (with `options`), remove/replace
+    the old flat `workspace.slots` field. This is a breaking public-contract
+    change — bump whatever versioning convention the repo uses for the
+    client/server contract, and update both sides together.
+
+4.6 Client (`apps/web`)
+  - Find and update whatever component currently renders `workspace.slots`
+    (search the web app for `workspace` / `slots` usage against
+    `PublicSession`).
+  - Render, in order: `completed_steps` (read-only, already-answered,
+    displayed as history) followed by `current_step` (interactive, showing
+    `current_step.options` as selectable choices).
+  - On a rejected submission: show the server's error message, keep
+    rendering the same `current_step` (do not clear/advance).
+  - On an accepted submission that returns a new `current_step`: re-render
+    with the growing `completed_steps` list + new current step.
+  - On an accepted submission that returns `current_step: null` /
+    `status: COMPLETED`: show a success/problem-complete notification
+    instead of any step UI.
+
+===========================================================================
+5. FIXTURE DATA MIGRATION
+===========================================================================
+Every existing problem fixture (JSON fixtures under content/import paths, and
+`table-problems-bootstrap.csv` at repo root if it encodes the same shape)
+must be converted from `assignable` + `invalid_assignments` to the new
+`steps` array with `step_pos`, `correct_slot`, and `options`. This is a
+one-time content migration script or manual edit — check
+`apps/api/src/modules/content/import-cli.ts` / `importer.ts` for the current
+import path and re-run import against the updated fixtures after the schema
+change lands, so the validator (per §4.1) catches any malformed content
+before it reaches the DB.
+
+===========================================================================
+6. TESTS TO UPDATE
+===========================================================================
+- `packages/problem-content/src/schema.test.ts` — replace
+  assignable/invalid_assignments test fixtures with the new `steps` shape;
+  add cases for the new validations (step_pos gap/duplicate, missing correct
+  option, unclassified wrong option, duplicate slot within one step's
+  options).
+- `packages/engine` tests (wherever they live — check for a
+  `packages/engine/src/*.test.ts` or similar) — replace "any reachable empty
+  assignable" tests with "exactly one current step at a time" tests; add a
+  last-step-completes-problem test.
+- `apps/api/src/modules/sessions/*.test.ts` (service/serializer/repo) —
+  update fixtures/assertions for `completed_steps` / `current_step` shape;
+  add a test asserting `current_step.options` never contains
+  `misconception_code` isn't leaked pre-answer... actually it's fine to
+  include misconception_code server-side only if it's stripped before
+  reaching the wire — add an explicit test asserting the wire payload has no
+  correctness-revealing field.
+- `tests/invariants/schema.test.ts` (repo root level) — check whether this
+  references the old `assignable` shape and update accordingly.
+- Any Playwright/e2e specs under `tests/` that click through a problem —
+  update selectors/expectations for the new step-by-step UI.
+
+===========================================================================
+7. ACCEPTANCE CHECKLIST
+===========================================================================
+[ ] Fixture schema requires ordered, contiguous `step_pos` per problem.
+[ ] Fixture schema requires each step to have >=2 options with exactly one
+    matching `correct_slot`.
+[ ] Engine exposes exactly one current step at a time (never zero-or-many
+    while the problem is ACTIVE and incomplete).
+[ ] Wrong answer -> session stays on same `current_step`, response includes
+    an error message, no `completed_steps` change.
+[ ] Correct answer, not last step -> `completed_steps` gains the just-
+    answered step (in position order), `current_step` becomes the next step.
+[ ] Correct answer, last step -> `current_step` becomes null, session status
+    becomes COMPLETED, response signals success distinctly.
+[ ] Public API payload for `current_step` never reveals which option is
+    correct or any `misconception_code` before submission.
+[ ] No DB migration required (definition stays JSONB); confirm no schema.ts
+    table changes were introduced.
+[ ] `npm run verify` passes.
+[ ] All existing fixtures re-imported successfully under the new schema.
+
+===========================================================================
+8. EXPLICITLY OUT OF SCOPE (do not implement here)
+===========================================================================
+The following remain unimplemented after this change and are intentionally
+deferred — see `cc_diff.txt` in repo root for the full picture and suggested
+order:
+  - A real relational `steps` table (this change keeps steps inside the
+    `problems.definition` JSONB, per the "minimal fix" decision).
+  - A generic `transitions` graph / ADVANCE/RETRY/ROLLBACK/ENTER_REMEDIATION/
+    REPLAY_PARENT/SATISFY_PARENT action model.
+  - Remediation paths (breaking a failed step into smaller interleaved
+    substeps).
+  - Rollback to an earlier step (only the existing chunk-level
+    `rollback_rules`/`rollback_logs` mechanism remains, unchanged).
+  - Additional response types beyond single-selection-from-options (multiple
+    selection, ordering, numeric entry, structured expression construction,
+    etc.).
+  - Any change to `misconception_classes`, `rollback_rules`, `rollback_logs`
+    tables.
+
+===========================================================================
+9. RISK NOTES
+===========================================================================
+- This is a breaking change to the fixture content format AND the public
+  session API contract (`PublicSession` shape). Both server and client must
+  deploy together; existing in-flight sessions created under the old shape
+  should either be drained/completed before cutover or the migration must
+  include a compatibility read-path (team's call — not designed here since
+  the product currently has no production traffic constraint mentioned).
+- Recommend implementing as its own Slice (per repo convention in
+  design-docs/slices/) rather than an ad hoc patch, so it goes through the
+  normal ACCEPTANCE.md criteria and `npm run verify` gate.

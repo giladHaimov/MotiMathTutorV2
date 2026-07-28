@@ -102,21 +102,30 @@ async function completeCanonical(
 
 const pinDefinition: ProblemDefinitionFixture = {
   workspace_slots: ['WHOLE', 'UNKNOWN'],
-  assignable: [
+  steps: [
     {
+      step_pos: 1,
       token_id: 'pin-c0-whole',
-      slot: 'WHOLE',
+      correct_slot: 'WHOLE',
       requires_revealed_chunk_index: 0,
       label: '10',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 2,
       token_id: 'pin-c1-unknown',
-      slot: 'UNKNOWN',
+      correct_slot: 'UNKNOWN',
       requires_revealed_chunk_index: 1,
       label: 'unknown',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
   ],
-  invalid_assignments: [],
   fact_establishments: [],
   sufficiency_dependencies: [],
   gates: [{ reveals_chunk_index: 1, requires_commitment: 'WHOLE_IDENTIFIED' }],
@@ -309,9 +318,7 @@ describe('historical session content pinning (AC-013)', () => {
       expect(resumedBody.content_version).toBe(1);
       expect(resumedBody.visible_chunks[0]?.content).toContain('version 1');
       expect(resumedBody.visible_chunks[0]?.content).not.toContain('version 2');
-      expect(resumedBody.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe(
-        'pin-c0-whole',
-      );
+      expect(resumedBody.completed_steps.some((s) => s.token_id === 'pin-c0-whole')).toBe(true);
 
       session = await act(owner, resumedBody, 'SUBMIT_COMMITMENT', {});
       expect(session.content_version).toBe(1);

@@ -34,7 +34,6 @@ export function ProblemView({
   onReload: () => void;
   onBack: () => void;
 }): React.JSX.Element {
-  const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [answer, setAnswer] = useState('');
 
   // Controls are gated exclusively by server `allowed_actions` (AC-050).
@@ -48,11 +47,6 @@ export function ProblemView({
   const canSubmitAnswer = session.allowed_actions.includes('SUBMIT_FINAL_ANSWER') && !actionsLocked;
   const isCompleted = session.status === 'COMPLETED';
   const showRetry = ux === 'retry' || ux === 'offline' || (pending && isCompleted);
-
-  // Tokens already placed anywhere in the workspace should not be re-offered.
-  const placed = new Set(
-    session.workspace.slots.map((s) => s.token_id).filter((id): id is string => id !== null),
-  );
 
   // COMPLETED must never hide a still-pending final-answer action (reconcile should
   // clear it first; this UI is the last-resort safeguard against stranding).
@@ -130,62 +124,55 @@ export function ProblemView({
               data-testid={`chunk-${chunk.order_index}`}
             >
               <div>{chunk.content}</div>
+            </div>
+          ))}
+
+          <h2>Steps</h2>
+          {session.completed_steps.map((step) => (
+            <div
+              key={step.step_pos}
+              className="step step--completed"
+              data-testid={`completed-step-${step.step_pos}`}
+            >
+              <strong>{step.label}</strong>
+              <span data-testid={`completed-step-answer-${step.step_pos}`}>
+                {step.correct_slot}
+              </span>
+              <button
+                type="button"
+                data-testid={`delete-${step.correct_slot}`}
+                disabled={!canDelete}
+                onClick={() => onDelete(step.correct_slot)}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+
+          {session.current_step && (
+            <div className="step step--current" data-testid="current-step">
+              <strong>{session.current_step.label}</strong>
               <div>
-                {chunk.tokens.map((token) => (
+                {session.current_step.options.map((option) => (
                   <button
-                    key={token.token_id}
-                    className="token"
-                    data-testid={`token-${token.token_id}`}
-                    aria-label={`token-${token.token_id}`}
-                    disabled={placed.has(token.token_id) || !canAssign}
-                    aria-pressed={selectedToken === token.token_id}
-                    onClick={() => setSelectedToken(token.token_id)}
+                    key={option.slot}
+                    type="button"
+                    className="option"
+                    data-testid={`current-step-option-${option.slot}`}
+                    aria-label={`current-step-option-${option.slot}`}
+                    disabled={!canAssign}
+                    onClick={() => {
+                      if (session.current_step) {
+                        onAssign(option.slot, session.current_step.token_id);
+                      }
+                    }}
                   >
-                    {token.text}
+                    {option.label}
                   </button>
                 ))}
               </div>
             </div>
-          ))}
-
-          <h2>Workspace</h2>
-          {session.workspace.slots.map((slot) => (
-            <div
-              key={slot.slot}
-              className={`slot ${slot.token_id ? 'slot--filled' : ''}`}
-              data-testid={`slot-${slot.slot}`}
-            >
-              <strong>{slot.slot}</strong>
-              {slot.token_id ? (
-                <>
-                  <span data-testid={`slot-label-${slot.slot}`}>{slot.label}</span>
-                  <button
-                    type="button"
-                    data-testid={`delete-${slot.slot}`}
-                    disabled={!canDelete}
-                    onClick={() => onDelete(slot.slot)}
-                  >
-                    Delete
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  data-testid={`assign-${slot.slot}`}
-                  aria-label={`assign-${slot.slot}`}
-                  disabled={!selectedToken || !canAssign}
-                  onClick={() => {
-                    if (selectedToken) {
-                      onAssign(slot.slot, selectedToken);
-                      setSelectedToken(null);
-                    }
-                  }}
-                >
-                  Place selected here
-                </button>
-              )}
-            </div>
-          ))}
+          )}
 
           <div className="actions">
             <button

@@ -124,7 +124,7 @@ describe('EX-01 percentage journey (real API + PostgreSQL)', () => {
     expect(rejected.body.message).toMatch(/structurally invalid|cannot be placed/i);
     expect(rejected.body.visible_chunks).toHaveLength(2);
     expect(rejected.raw).not.toContain('How many students');
-    expect(rejected.body.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBeNull();
+    expect(rejected.body.completed_steps.some((s) => s.correct_slot === 'WHOLE')).toBe(false);
 
     const attempts = await db
       .select()
@@ -148,13 +148,14 @@ describe('EX-01 percentage journey (real API + PostgreSQL)', () => {
     expect(blocked.body.message).toMatch(/delete/i);
 
     ({ body: session } = await act(user, session, 'DELETE_ASSIGNMENT', { slot: 'WHOLE' }));
-    expect(session.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBeNull();
+    expect(session.completed_steps.some((s) => s.correct_slot === 'WHOLE')).toBe(false);
+    expect(session.current_step?.token_id).toBe('ex01-c0-whole');
 
     ({ body: session } = await act(user, session, 'ASSIGN_SLOT', {
       slot: 'WHOLE',
       token_id: 'ex01-c0-whole',
     }));
-    expect(session.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe('ex01-c0-whole');
+    expect(session.completed_steps.some((s) => s.token_id === 'ex01-c0-whole')).toBe(true);
   });
 
   it('final answer submitted early is unavailable (AC-033)', async () => {
@@ -210,10 +211,8 @@ describe('EX-01 percentage journey (real API + PostgreSQL)', () => {
     const body = resumed.json() as PublicSession;
     expect(body.state_version).toBe(session.state_version);
     expect(body.visible_chunks.map((c) => c.order_index)).toEqual([0, 1]);
-    expect(body.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe('ex01-c0-whole');
-    expect(body.workspace.slots.find((s) => s.slot === 'PART_IN_PERCENTAGE')?.token_id).toBe(
-      'ex01-c1-percent',
-    );
+    expect(body.completed_steps.some((s) => s.token_id === 'ex01-c0-whole')).toBe(true);
+    expect(body.completed_steps.some((s) => s.token_id === 'ex01-c1-percent')).toBe(true);
     expect(body.accepted_commitments).toEqual(['WHOLE_IDENTIFIED']);
     expect(resumed.body).not.toContain('How many students');
   });

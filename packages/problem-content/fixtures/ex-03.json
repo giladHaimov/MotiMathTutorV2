@@ -7,7 +7,7 @@
   },
   "problem": {
     "problem_key": "EX-03",
-    "version": 2,
+    "version": 3,
     "domain": "FRACTION",
     "title": "Fraction: distinguish read from remaining",
     "difficulty_level": 3,
@@ -15,31 +15,42 @@
     "status": "ACTIVE",
     "definition": {
       "workspace_slots": ["FRACTION", "WHOLE", "UNKNOWN"],
-      "assignable": [
+      "steps": [
         {
+          "step_pos": 1,
           "token_id": "ex03-c0-fraction",
-          "slot": "FRACTION",
+          "correct_slot": "FRACTION",
           "requires_revealed_chunk_index": 0,
-          "label": "three fifths (read)"
+          "label": "three fifths (read)",
+          "options": [
+            { "slot": "FRACTION", "label": "Fraction read" },
+            { "slot": "WHOLE", "label": "Whole" },
+            { "slot": "UNKNOWN", "label": "Unknown", "misconception_code": "COMPLEMENT_CONFUSION" }
+          ]
         },
         {
+          "step_pos": 2,
           "token_id": "ex03-c1-whole",
-          "slot": "WHOLE",
+          "correct_slot": "WHOLE",
           "requires_revealed_chunk_index": 1,
-          "label": "50 pages"
+          "label": "50 pages",
+          "options": [
+            { "slot": "FRACTION", "label": "Fraction read" },
+            { "slot": "WHOLE", "label": "Whole" },
+            { "slot": "UNKNOWN", "label": "Unknown" }
+          ]
         },
         {
+          "step_pos": 3,
           "token_id": "ex03-c2-unknown",
-          "slot": "UNKNOWN",
+          "correct_slot": "UNKNOWN",
           "requires_revealed_chunk_index": 2,
-          "label": "pages that remain unread"
-        }
-      ],
-      "invalid_assignments": [
-        {
-          "token_id": "ex03-c0-fraction",
-          "slot": "UNKNOWN",
-          "misconception_code": "COMPLEMENT_CONFUSION"
+          "label": "pages that remain unread",
+          "options": [
+            { "slot": "FRACTION", "label": "Fraction read" },
+            { "slot": "WHOLE", "label": "Whole" },
+            { "slot": "UNKNOWN", "label": "Unknown" }
+          ]
         }
       ],
       "fact_establishments": [

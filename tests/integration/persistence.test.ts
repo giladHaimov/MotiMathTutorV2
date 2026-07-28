@@ -52,7 +52,7 @@ describe('durable persistence across backend restart (AC-022, SCN-11)', () => {
 
     expect(resumed.session_id).toBe(started.session_id);
     expect(resumed.state_version).toBe(1);
-    expect(resumed.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe(token);
+    expect(resumed.completed_steps.find((s) => s.correct_slot === 'WHOLE')?.token_id).toBe(token);
     expect(resumed.visible_chunks).toHaveLength(1);
 
     await appB.close();

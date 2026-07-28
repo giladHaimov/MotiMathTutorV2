@@ -116,9 +116,7 @@ describe('EX-04 conflict deletion + deterministic rollback (real API + PostgreSQ
       token_id: 'ex04-c0-whole',
     });
     expect(wrongPart.status).toBe(200);
-    expect(
-      wrongPart.body.workspace.slots.find((s) => s.slot === 'PART_IN_NUMBER')?.token_id,
-    ).toBeNull();
+    expect(wrongPart.body.completed_steps.some((s) => s.token_id === 'ex04-c0-whole')).toBe(false);
     session = wrongPart.body;
 
     const attempts = await db
@@ -141,9 +139,7 @@ describe('EX-04 conflict deletion + deterministic rollback (real API + PostgreSQ
       token_id: 'ex04-c1-percent',
     });
     expect(conflict.body.message).toMatch(/invalid|delete|occupied/i);
-    expect(conflict.body.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe(
-      'ex04-c0-whole',
-    );
+    expect(conflict.body.completed_steps.some((s) => s.token_id === 'ex04-c0-whole')).toBe(true);
     expect(conflict.body.visible_chunks).toHaveLength(2);
     expect(conflict.body.guidance_code).toBeNull();
     session = conflict.body;
@@ -156,14 +152,12 @@ describe('EX-04 conflict deletion + deterministic rollback (real API + PostgreSQ
     });
     expect(resumed.statusCode).toBe(200);
     const resumedBody = resumed.json() as PublicSession;
-    expect(resumedBody.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBe(
-      'ex04-c0-whole',
-    );
+    expect(resumedBody.completed_steps.some((s) => s.token_id === 'ex04-c0-whole')).toBe(true);
     session = resumedBody;
 
     // Explicit server delete unblocks (PB-007).
     ({ body: session } = await act(user, session, 'DELETE_ASSIGNMENT', { slot: 'WHOLE' }));
-    expect(session.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBeNull();
+    expect(session.completed_steps.some((s) => s.correct_slot === 'WHOLE')).toBe(false);
   });
 
   it('second CONFLICTING_SLOT_ASSIGNMENT applies fixture rollback + log (AC-031/039/044)', async () => {

@@ -16,9 +16,9 @@ async function register(page: Page, label: string): Promise<void> {
   await expect(page.getByTestId('dashboard')).toBeVisible();
 }
 
-async function assignToken(page: Page, tokenId: string, slot: string): Promise<void> {
-  await page.getByTestId(`token-${tokenId}`).click();
-  await page.getByTestId(`assign-${slot}`).click();
+/** Answer the current step by clicking one of its curated options (change-28-jul.txt). */
+async function answerStep(page: Page, slot: string): Promise<void> {
+  await page.getByTestId(`current-step-option-${slot}`).click();
 }
 
 async function continueWhenReady(page: Page): Promise<void> {
@@ -57,8 +57,7 @@ test('AC-048 lost response then retry reuses same client_action_id', async ({ pa
     await route.continue();
   });
 
-  await page.getByTestId('token-ex01-c0-whole').click();
-  await page.getByTestId('assign-WHOLE').click();
+  await answerStep(page, 'WHOLE');
 
   await expect(page.getByTestId('retry-action')).toBeVisible();
   await expect(page.getByTestId('message')).toContainText(/Network error/i);
@@ -67,7 +66,7 @@ test('AC-048 lost response then retry reuses same client_action_id', async ({ pa
 
   await page.getByTestId('retry-action').click();
   await expect(page.getByTestId('state-version')).toHaveText('1');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
   await expect(page.getByTestId('retry-action')).toHaveCount(0);
 
   expect(actionBodies.length).toBe(2);
@@ -103,8 +102,7 @@ test('AC-048 committed pending is cleared on resume (no duplicate)', async ({ pa
     await route.continue();
   });
 
-  await page.getByTestId('token-ex01-c0-whole').click();
-  await page.getByTestId('assign-WHOLE').click();
+  await answerStep(page, 'WHOLE');
   await expect(page.getByTestId('retry-action')).toBeVisible();
   const originalId = await page.getByTestId('pending-action-id').innerText();
   expect(originalId.length).toBeGreaterThan(10);
@@ -118,7 +116,7 @@ test('AC-048 committed pending is cleared on resume (no duplicate)', async ({ pa
   // Boot opens the pending session and reconciles: authoritative state, pending cleared.
   await expect(page.getByTestId('problem-screen')).toBeVisible();
   await expect(page.getByTestId('state-version')).toHaveText('1');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
   await expect(page.getByTestId('retry-action')).toHaveCount(0);
   await expect(page.getByTestId('pending-action-id')).toHaveCount(0);
 
@@ -140,11 +138,11 @@ test('final-answer lost response reconciles to COMPLETED without duplicate', asy
   await page.getByTestId('start-session').click();
   await expect(page.getByTestId('problem-screen')).toBeVisible();
 
-  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex01-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex01-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await expect(page.getByTestId('final-answer-input')).toBeVisible();
 
   const actionBodies: Array<{ client_action_id: string; action_type: string }> = [];
@@ -210,8 +208,7 @@ test('stale version conflict reconciles UI to authoritative state', async ({ pag
   await page.getByTestId('start-session').click();
   await expect(page.getByTestId('problem-screen')).toBeVisible();
 
-  await page.getByTestId('token-ex01-c0-whole').click();
-  await page.getByTestId('assign-WHOLE').click();
+  await answerStep(page, 'WHOLE');
   await expect(page.getByTestId('state-version')).toHaveText('1');
 
   // Force the next action to claim an old expected_state_version.
@@ -229,7 +226,7 @@ test('stale version conflict reconciles UI to authoritative state', async ({ pag
   await page.getByTestId('continue').click();
   await expect(page.getByTestId('message')).toBeVisible();
   await expect(page.getByTestId('state-version')).toHaveText('1');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
   await expect(page.getByTestId('chunk-1')).toHaveCount(0);
 });
 
@@ -243,16 +240,14 @@ test('AC-050 final answer control absent until server allows it', async ({ page 
   await expect(page.getByTestId('final-answer')).toHaveCount(0);
   await expect(page.getByTestId('submit-answer')).toHaveCount(0);
 
-  await page.getByTestId('token-ex01-c0-whole').click();
-  await page.getByTestId('assign-WHOLE').click();
+  await answerStep(page, 'WHOLE');
   await expect(page.getByTestId('final-answer')).toHaveCount(0);
 });
 
 test('refresh resume restores authoritative problem state (AC-049)', async ({ page }) => {
   await register(page, 'Refresh Resume');
   await page.getByTestId('start-session').click();
-  await page.getByTestId('token-ex01-c0-whole').click();
-  await page.getByTestId('assign-WHOLE').click();
+  await answerStep(page, 'WHOLE');
   await expect(page.getByTestId('state-version')).toHaveText('1');
 
   await page.reload();
@@ -260,5 +255,5 @@ test('refresh resume restores authoritative problem state (AC-049)', async ({ pa
   await page.getByTestId('resume-session').click();
   await expect(page.getByTestId('problem-screen')).toBeVisible();
   await expect(page.getByTestId('state-version')).toHaveText('1');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
 });

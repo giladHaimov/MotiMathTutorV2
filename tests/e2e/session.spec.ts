@@ -27,12 +27,11 @@ test('start session shows only chunk 1, assign Whole, resume persists', async ({
   await expect(page.getByTestId('chunk-2')).toHaveCount(0);
   await expect(page.getByTestId('state-version')).toHaveText('0');
 
-  // Assign the revealed token into the Whole slot.
-  await page.getByTestId('token-ex01-c0-whole').click();
-  await page.getByTestId('assign-WHOLE').click();
+  // Answer the current step's correct option (Whole).
+  await page.getByTestId('current-step-option-WHOLE').click();
 
   await expect(page.getByTestId('state-version')).toHaveText('1');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
 
   // Reload (client state discarded) and resume from the server: state persists.
   await page.reload();
@@ -40,5 +39,5 @@ test('start session shows only chunk 1, assign Whole, resume persists', async ({
   await page.getByTestId('resume-session').click();
   await expect(page.getByTestId('problem-screen')).toBeVisible();
   await expect(page.getByTestId('state-version')).toHaveText('1');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
 });

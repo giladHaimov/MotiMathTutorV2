@@ -29,11 +29,24 @@ export interface EngineSufficiencyDependency {
   message: string;
 }
 
-/** Invalid token→slot pairing mapped to a misconception class. */
-export interface EngineInvalidAssignment {
-  token_id: string;
+/** One selectable answer choice for a step; wrong choices may carry a misconception code. */
+export interface EngineStepOption {
   slot: Slot;
-  misconception_code: string;
+  label: string;
+  misconception_code?: string | null;
+}
+
+/** One ordered reasoning step: a token to be placed in its one correct slot. */
+export interface EngineStep {
+  step_pos: number;
+  token_id: string;
+  correct_slot: Slot;
+  /** Highest chunk index that must already be revealed for the step to be active. */
+  requires_revealed_chunk_index: number;
+  /** Human-safe label persisted into the workspace (never hidden content). */
+  label: string;
+  /** Authored answer set shown to the student for this step. */
+  options: EngineStepOption[];
 }
 
 /** Fixture-/DB-defined deterministic rollback rule (Slice 04 / EX-04). */
@@ -60,17 +73,8 @@ export interface EngineProblemDefinition {
   problem_key: string;
   /** Slots this problem version exposes in the typed workspace. */
   workspace_slots: Slot[];
-  /** Which token may be placed into which slot, and the chunk that must be revealed first. */
-  assignable: Array<{
-    token_id: string;
-    slot: Slot;
-    /** Highest chunk index that must already be revealed for the assignment to be permitted. */
-    requires_revealed_chunk_index: number;
-    /** Human-safe label persisted into the workspace (never hidden content). */
-    label: string;
-  }>;
-  /** Known-invalid placements → deterministic misconception codes. */
-  invalid_assignments: EngineInvalidAssignment[];
+  /** Ordered reasoning steps (change-28-jul.txt): exactly one is ever active at a time. */
+  steps: EngineStep[];
   /** Facts established by reveal position (data-driven sufficiency). */
   fact_establishments: EngineFactEstablishment[];
   /** Actions blocked until named facts are established. */

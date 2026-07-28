@@ -432,8 +432,8 @@ export class ScenarioRunner {
       ],
     ];
     if (step.slot) {
-      const actual = session.workspace.slots.find(
-        (slot) => slot.slot === step.slot!.name,
+      const actual = session.completed_steps.find(
+        (completed) => completed.correct_slot === step.slot!.name,
       )?.token_id;
       checks.push([
         actual === step.slot.tokenId,
@@ -512,7 +512,8 @@ export class ScenarioRunner {
     const session = publicSessionFrom(response)!;
     if (
       session.state_version !== before.state_version ||
-      JSON.stringify(session.workspace) !== JSON.stringify(before.workspace) ||
+      JSON.stringify(session.completed_steps) !== JSON.stringify(before.completed_steps) ||
+      JSON.stringify(session.current_step) !== JSON.stringify(before.current_step) ||
       JSON.stringify(session.visible_chunks) !== JSON.stringify(before.visible_chunks)
     ) {
       stepError(scenario, index, 'restart did not resume exact authoritative state');

@@ -19,16 +19,17 @@ export function toEngineProblemDefinition(
   return {
     problem_key: problemKey,
     workspace_slots: parsed.workspace_slots,
-    assignable: parsed.assignable.map((a) => ({
-      token_id: a.token_id,
-      slot: a.slot,
-      requires_revealed_chunk_index: a.requires_revealed_chunk_index,
-      label: a.label,
-    })),
-    invalid_assignments: parsed.invalid_assignments.map((a) => ({
-      token_id: a.token_id,
-      slot: a.slot,
-      misconception_code: a.misconception_code,
+    steps: parsed.steps.map((s) => ({
+      step_pos: s.step_pos,
+      token_id: s.token_id,
+      correct_slot: s.correct_slot,
+      requires_revealed_chunk_index: s.requires_revealed_chunk_index,
+      label: s.label,
+      options: s.options.map((o) => ({
+        slot: o.slot,
+        label: o.label,
+        misconception_code: o.misconception_code ?? null,
+      })),
     })),
     fact_establishments: parsed.fact_establishments.map((f) => ({
       fact: f.fact,

@@ -10,31 +10,45 @@ import {
 const def: EngineProblemDefinition = {
   problem_key: 'EX-01',
   workspace_slots: ['WHOLE', 'PART_IN_PERCENTAGE', 'PART_IN_NUMBER', 'UNKNOWN'],
-  assignable: [
+  steps: [
     {
+      step_pos: 1,
       token_id: 'ex01-c0-whole',
-      slot: 'WHOLE',
+      correct_slot: 'WHOLE',
       requires_revealed_chunk_index: 0,
       label: '40 students',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 2,
       token_id: 'ex01-c1-percent',
-      slot: 'PART_IN_PERCENTAGE',
+      correct_slot: 'PART_IN_PERCENTAGE',
       requires_revealed_chunk_index: 1,
       label: '30%',
+      options: [
+        { slot: 'WHOLE', label: 'Whole', misconception_code: 'WHOLE_PART_CONFUSION' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 3,
       token_id: 'ex01-c2-unknown',
-      slot: 'UNKNOWN',
+      correct_slot: 'UNKNOWN',
       requires_revealed_chunk_index: 2,
       label: 'students who wear glasses',
-    },
-  ],
-  invalid_assignments: [
-    {
-      token_id: 'ex01-c1-percent',
-      slot: 'WHOLE',
-      misconception_code: 'WHOLE_PART_CONFUSION',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
   ],
   fact_establishments: [],
@@ -52,27 +66,44 @@ const def: EngineProblemDefinition = {
 const ratioDef: EngineProblemDefinition = {
   problem_key: 'EX-02',
   workspace_slots: ['RATIO', 'PART_IN_NUMBER', 'UNKNOWN'],
-  assignable: [
+  steps: [
     {
+      step_pos: 1,
       token_id: 'ex02-c0-ratio',
-      slot: 'RATIO',
+      correct_slot: 'RATIO',
       requires_revealed_chunk_index: 0,
       label: '2:3',
+      options: [
+        { slot: 'RATIO', label: 'Ratio' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 2,
       token_id: 'ex02-c1-blue',
-      slot: 'PART_IN_NUMBER',
+      correct_slot: 'PART_IN_NUMBER',
       requires_revealed_chunk_index: 1,
       label: '15 blue marbles',
+      options: [
+        { slot: 'RATIO', label: 'Ratio' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 3,
       token_id: 'ex02-c2-unknown',
-      slot: 'UNKNOWN',
+      correct_slot: 'UNKNOWN',
       requires_revealed_chunk_index: 2,
       label: 'red marbles',
+      options: [
+        { slot: 'RATIO', label: 'Ratio' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
   ],
-  invalid_assignments: [],
   fact_establishments: [
     { fact: 'RATIO', revealed_at_chunk_index: 0 },
     { fact: 'SCALE', revealed_at_chunk_index: 1 },
@@ -100,31 +131,42 @@ const ratioDef: EngineProblemDefinition = {
 const fractionDef: EngineProblemDefinition = {
   problem_key: 'EX-03',
   workspace_slots: ['FRACTION', 'WHOLE', 'UNKNOWN'],
-  assignable: [
+  steps: [
     {
+      step_pos: 1,
       token_id: 'ex03-c0-fraction',
-      slot: 'FRACTION',
+      correct_slot: 'FRACTION',
       requires_revealed_chunk_index: 0,
       label: 'three fifths (read)',
+      options: [
+        { slot: 'FRACTION', label: 'Fraction read' },
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'UNKNOWN', label: 'Unknown', misconception_code: 'COMPLEMENT_CONFUSION' },
+      ],
     },
     {
+      step_pos: 2,
       token_id: 'ex03-c1-whole',
-      slot: 'WHOLE',
+      correct_slot: 'WHOLE',
       requires_revealed_chunk_index: 1,
       label: '50 pages',
+      options: [
+        { slot: 'FRACTION', label: 'Fraction read' },
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 3,
       token_id: 'ex03-c2-unknown',
-      slot: 'UNKNOWN',
+      correct_slot: 'UNKNOWN',
       requires_revealed_chunk_index: 2,
       label: 'pages that remain unread',
-    },
-  ],
-  invalid_assignments: [
-    {
-      token_id: 'ex03-c0-fraction',
-      slot: 'UNKNOWN',
-      misconception_code: 'COMPLEMENT_CONFUSION',
+      options: [
+        { slot: 'FRACTION', label: 'Fraction read' },
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
   ],
   fact_establishments: [
@@ -170,7 +212,7 @@ function freshState(definition: EngineProblemDefinition = def): EngineSessionSta
 function assign(
   definition: EngineProblemDefinition,
   state: EngineSessionState,
-  slot: EngineProblemDefinition['assignable'][number]['slot'],
+  slot: EngineProblemDefinition['steps'][number]['correct_slot'],
   token_id: string,
 ): EngineSessionState {
   const result = applyAction({
@@ -224,8 +266,28 @@ describe('engine.applyAction', () => {
     expect(result.nextState).toEqual(state);
   });
 
-  it('classifies invalid token/slot pairing deterministically (AC-030)', () => {
+  it('rejects a not-yet-revealed token/slot pairing without classifying it', () => {
+    // Step 2's token isn't revealed yet at chunk 0 — this must be a plain
+    // "not revealed" rejection, not a misconception classification (that only
+    // applies once the step is actually reachable).
     const state = freshState();
+    const result = applyAction({
+      problemDefinition: def,
+      sessionState: state,
+      action: {
+        action_type: 'ASSIGN_SLOT',
+        payload: { slot: 'WHOLE', token_id: 'ex01-c1-percent' },
+      },
+    });
+    expect(result.outcome).toBe('REJECTED');
+    expect(result.misconception_code).toBeNull();
+    expect(result.nextState).toEqual(state);
+  });
+
+  it('classifies invalid token/slot pairing deterministically once the step is reachable (AC-030)', () => {
+    let state = assign(def, freshState(), 'WHOLE', 'ex01-c0-whole');
+    state = commit(def, state);
+
     const first = applyAction({
       problemDefinition: def,
       sessionState: state,
@@ -245,7 +307,9 @@ describe('engine.applyAction', () => {
     expect(first.outcome).toBe('REJECTED');
     expect(first.misconception_code).toBe('WHOLE_PART_CONFUSION');
     expect(first).toEqual(second);
-    expect(first.nextState.workspace.slots.find((s) => s.slot === 'WHOLE')?.token_id).toBeNull();
+    expect(
+      first.nextState.workspace.slots.find((s) => s.slot === 'PART_IN_PERCENTAGE')?.token_id,
+    ).toBeNull();
   });
 
   it('blocks assignment into an occupied slot until deletion', () => {
@@ -624,36 +688,49 @@ describe('Slice 03 complement confusion + EX-03 (AC-038)', () => {
 const ex04Def: EngineProblemDefinition = {
   problem_key: 'EX-04',
   workspace_slots: ['WHOLE', 'PART_IN_PERCENTAGE', 'PART_IN_NUMBER', 'UNKNOWN'],
-  assignable: [
+  steps: [
     {
+      step_pos: 1,
       token_id: 'ex04-c0-whole',
-      slot: 'WHOLE',
+      correct_slot: 'WHOLE',
       requires_revealed_chunk_index: 0,
       label: '40 students',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        {
+          slot: 'PART_IN_NUMBER',
+          label: 'Numeric part',
+          misconception_code: 'WHOLE_PART_CONFUSION',
+        },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 2,
       token_id: 'ex04-c1-percent',
-      slot: 'PART_IN_PERCENTAGE',
+      correct_slot: 'PART_IN_PERCENTAGE',
       requires_revealed_chunk_index: 1,
       label: '30%',
+      options: [
+        { slot: 'WHOLE', label: 'Whole', misconception_code: 'CONFLICTING_SLOT_ASSIGNMENT' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 3,
       token_id: 'ex04-c2-unknown',
-      slot: 'UNKNOWN',
+      correct_slot: 'UNKNOWN',
       requires_revealed_chunk_index: 2,
       label: 'students who wear glasses',
-    },
-  ],
-  invalid_assignments: [
-    {
-      token_id: 'ex04-c0-whole',
-      slot: 'PART_IN_NUMBER',
-      misconception_code: 'WHOLE_PART_CONFUSION',
-    },
-    {
-      token_id: 'ex04-c1-percent',
-      slot: 'WHOLE',
-      misconception_code: 'CONFLICTING_SLOT_ASSIGNMENT',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
   ],
   fact_establishments: [],

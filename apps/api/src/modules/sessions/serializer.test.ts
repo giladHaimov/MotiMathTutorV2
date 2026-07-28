@@ -5,31 +5,45 @@ import { buildPublicSession, type SerializeInput } from './serializer.js';
 const problemDefinition: EngineProblemDefinition = {
   problem_key: 'EX-01',
   workspace_slots: ['WHOLE', 'PART_IN_PERCENTAGE', 'PART_IN_NUMBER', 'UNKNOWN'],
-  assignable: [
+  steps: [
     {
+      step_pos: 1,
       token_id: 'ex01-c0-whole',
-      slot: 'WHOLE',
+      correct_slot: 'WHOLE',
       requires_revealed_chunk_index: 0,
       label: '40 students',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 2,
       token_id: 'ex01-c1-percent',
-      slot: 'PART_IN_PERCENTAGE',
+      correct_slot: 'PART_IN_PERCENTAGE',
       requires_revealed_chunk_index: 1,
       label: '30%',
+      options: [
+        { slot: 'WHOLE', label: 'Whole', misconception_code: 'WHOLE_PART_CONFUSION' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
     {
+      step_pos: 3,
       token_id: 'ex01-c2-unknown',
-      slot: 'UNKNOWN',
+      correct_slot: 'UNKNOWN',
       requires_revealed_chunk_index: 2,
       label: 'students who wear glasses',
-    },
-  ],
-  invalid_assignments: [
-    {
-      token_id: 'ex01-c1-percent',
-      slot: 'WHOLE',
-      misconception_code: 'WHOLE_PART_CONFUSION',
+      options: [
+        { slot: 'WHOLE', label: 'Whole' },
+        { slot: 'PART_IN_PERCENTAGE', label: 'Percentage part' },
+        { slot: 'PART_IN_NUMBER', label: 'Numeric part' },
+        { slot: 'UNKNOWN', label: 'Unknown' },
+      ],
     },
   ],
   fact_establishments: [],
@@ -51,7 +65,6 @@ const baseInput: SerializeInput = {
   engineVersion: '1.0.0',
   contentVersion: 1,
   currentChunkIndex: 0,
-  workspaceSlots: ['WHOLE', 'PART_IN_PERCENTAGE', 'PART_IN_NUMBER', 'UNKNOWN'],
   workspace: {
     slots: [
       { slot: 'WHOLE', token_id: null, label: null },
@@ -103,14 +116,18 @@ describe('buildPublicSession (allowlist serializer)', () => {
     expect(JSON.stringify(publicSession)).not.toContain('How many students');
   });
 
-  it('projects every workspace slot defined by the problem version', () => {
+  it('exposes the current step with its full option set, not the correct answer', () => {
     const publicSession = buildPublicSession(baseInput);
-    expect(publicSession.workspace.slots.map((s) => s.slot)).toEqual([
+    expect(publicSession.completed_steps).toEqual([]);
+    expect(publicSession.current_step?.step_pos).toBe(1);
+    expect(publicSession.current_step?.token_id).toBe('ex01-c0-whole');
+    expect(publicSession.current_step?.options.map((o) => o.slot)).toEqual([
       'WHOLE',
       'PART_IN_PERCENTAGE',
       'PART_IN_NUMBER',
       'UNKNOWN',
     ]);
+    expect(JSON.stringify(publicSession)).not.toContain('misconception_code');
   });
 
   it('offers no actions once the session is not active', () => {

@@ -36,20 +36,30 @@ export const chunkSchema = z
   })
   .strict();
 
-export const assignableSchema = z
+/** One selectable answer choice for a step (ARCHITECTURE §7.1 "Answer options"). */
+export const stepOptionSchema = z
   .object({
-    token_id: z.string().min(1),
     slot: slotSchema,
-    requires_revealed_chunk_index: z.number().int().min(0),
     label: z.string().min(1),
+    /** Set on wrong options to classify the resulting misconception; omitted for the correct option. */
+    misconception_code: z.string().min(1).optional(),
   })
   .strict();
 
-export const invalidAssignmentSchema = z
+/**
+ * One ordered reasoning step (change-28-jul.txt). `step_pos` fixes the
+ * problem's linear step order; `correct_slot` is the one correct answer
+ * (never serialized to the client pre-submission); `options` is the full
+ * authored answer set shown to the student for this step.
+ */
+export const stepSchema = z
   .object({
+    step_pos: z.number().int().min(1),
     token_id: z.string().min(1),
-    slot: slotSchema,
-    misconception_code: z.string().min(1),
+    correct_slot: slotSchema,
+    requires_revealed_chunk_index: z.number().int().min(0),
+    label: z.string().min(1),
+    options: z.array(stepOptionSchema).min(2),
   })
   .strict();
 
@@ -79,8 +89,7 @@ export const sufficiencyDependencySchema = z
 export const definitionSchema = z
   .object({
     workspace_slots: z.array(slotSchema).min(1),
-    assignable: z.array(assignableSchema),
-    invalid_assignments: z.array(invalidAssignmentSchema).default([]),
+    steps: z.array(stepSchema).min(1),
     fact_establishments: z.array(factEstablishmentSchema).default([]),
     sufficiency_dependencies: z.array(sufficiencyDependencySchema).default([]),
     gates: z
@@ -170,47 +179,87 @@ export const problemFixtureSchema = z
           }
         }
 
-        // Unique assignable token IDs and unique assignable slot IDs.
-        const assignableTokenIds = new Set<string>();
-        const assignableSlots = new Set<string>();
-        for (const a of problem.definition.assignable) {
-          if (assignableTokenIds.has(a.token_id)) {
+        // Unique step token IDs, unique step correct_slot values, unique/contiguous step_pos.
+        const stepTokenIds = new Set<string>();
+        const stepSlots = new Set<string>();
+        const stepPositions = new Set<number>();
+        for (const step of problem.definition.steps) {
+          if (stepTokenIds.has(step.token_id)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `duplicate assignable token_id ${a.token_id}`,
+              message: `duplicate step token_id ${step.token_id}`,
             });
           }
-          assignableTokenIds.add(a.token_id);
+          stepTokenIds.add(step.token_id);
 
-          if (assignableSlots.has(a.slot)) {
+          if (stepSlots.has(step.correct_slot)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `duplicate assignable slot ${a.slot}`,
+              message: `duplicate step correct_slot ${step.correct_slot}`,
             });
           }
-          assignableSlots.add(a.slot);
+          stepSlots.add(step.correct_slot);
 
-          if (!tokenChunkIndex.has(a.token_id)) {
+          if (stepPositions.has(step.step_pos)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `assignable token_id ${a.token_id} is not defined in any chunk`,
+              message: `duplicate step step_pos ${step.step_pos}`,
+            });
+          }
+          stepPositions.add(step.step_pos);
+
+          const correctOptions = step.options.filter((o) => o.slot === step.correct_slot);
+          if (correctOptions.length !== 1) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `step ${step.token_id} must have exactly one option matching correct_slot ${step.correct_slot}; found ${correctOptions.length}`,
+            });
+          }
+          const optionSlots = new Set<string>();
+          for (const option of step.options) {
+            if (optionSlots.has(option.slot)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `step ${step.token_id} has duplicate option slot ${option.slot}`,
+              });
+            }
+            optionSlots.add(option.slot);
+          }
+
+          if (!tokenChunkIndex.has(step.token_id)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `step token_id ${step.token_id} is not defined in any chunk`,
             });
             continue;
           }
-          if (a.requires_revealed_chunk_index > lastChunkIndex) {
+          if (step.requires_revealed_chunk_index > lastChunkIndex) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `assignable ${a.token_id} requires a chunk index beyond the problem`,
+              message: `step ${step.token_id} requires a chunk index beyond the problem`,
             });
           }
           // Reveal requirement must match the chunk that actually owns the token.
-          const tokenChunk = tokenChunkIndex.get(a.token_id)!;
-          if (a.requires_revealed_chunk_index !== tokenChunk) {
+          const tokenChunk = tokenChunkIndex.get(step.token_id)!;
+          if (step.requires_revealed_chunk_index !== tokenChunk) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `assignable ${a.token_id} requires_revealed_chunk_index ${a.requires_revealed_chunk_index} must equal token chunk ${tokenChunk}`,
+              message: `step ${step.token_id} requires_revealed_chunk_index ${step.requires_revealed_chunk_index} must equal token chunk ${tokenChunk}`,
             });
           }
+        }
+
+        // step_pos must be contiguous starting at 1 (goal #1: an explicit ordered flow).
+        const sortedPositions = [...stepPositions].sort((a, b) => a - b);
+        const expectedPositions = problem.definition.steps.map((_, i) => i + 1);
+        const positionsContiguous =
+          sortedPositions.length === expectedPositions.length &&
+          sortedPositions.every((v, i) => v === expectedPositions[i]);
+        if (!positionsContiguous) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `step_pos must be contiguous from 1; found ${sortedPositions.join(',') || '(none)'}`,
+          });
         }
 
         const gates = problem.definition.gates;
@@ -267,18 +316,18 @@ export const problemFixtureSchema = z
           });
         }
 
-        // Each gate commitment references a valid assignable at the prior chunk
-        // (position-derived prerequisite): gate revealing K needs ≥1 assignable
+        // Each gate commitment references a valid step at the prior chunk
+        // (position-derived prerequisite): gate revealing K needs ≥1 step
         // with requires_revealed_chunk_index === K-1. Otherwise the gate deadlocks.
         for (const gate of gates) {
           const prerequisiteIndex = gate.reveals_chunk_index - 1;
-          const hasAssignable = problem.definition.assignable.some(
-            (a) => a.requires_revealed_chunk_index === prerequisiteIndex,
+          const hasStep = problem.definition.steps.some(
+            (s) => s.requires_revealed_chunk_index === prerequisiteIndex,
           );
-          if (!hasAssignable) {
+          if (!hasStep) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: `gate commitment ${gate.requires_commitment} revealing chunk ${gate.reveals_chunk_index} has no assignable at chunk ${prerequisiteIndex}`,
+              message: `gate commitment ${gate.requires_commitment} revealing chunk ${gate.reveals_chunk_index} has no step at chunk ${prerequisiteIndex}`,
             });
           }
         }

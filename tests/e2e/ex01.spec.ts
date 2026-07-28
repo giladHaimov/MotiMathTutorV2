@@ -23,9 +23,9 @@ async function startProblem(page: Page): Promise<void> {
   await expect(page.getByTestId('chunk-1')).toHaveCount(0);
 }
 
-async function assignToken(page: Page, tokenId: string, slot: string): Promise<void> {
-  await page.getByTestId(`token-${tokenId}`).click();
-  await page.getByTestId(`assign-${slot}`).click();
+/** Answer the current step by clicking one of its curated options (change-28-jul.txt). */
+async function answerStep(page: Page, slot: string): Promise<void> {
+  await page.getByTestId(`current-step-option-${slot}`).click();
 }
 
 async function continueWhenReady(page: Page): Promise<void> {
@@ -38,17 +38,17 @@ test('SCN-03 EX-01 happy path completes with answer 12', async ({ page }) => {
   await register(page, 'SCN Three');
   await startProblem(page);
 
-  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await answerStep(page, 'WHOLE');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
   await expect(page.getByTestId('chunk-2')).toHaveCount(0);
 
-  await assignToken(page, 'ex01-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-2')).toBeVisible();
 
-  await assignToken(page, 'ex01-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await expect(page.getByTestId('final-answer-input')).toBeVisible();
   await page.getByTestId('final-answer-input').fill('12');
   await page.getByTestId('submit-answer').click();
@@ -58,42 +58,61 @@ test('SCN-03 EX-01 happy path completes with answer 12', async ({ page }) => {
   await expect(page.getByTestId('result')).toBeVisible();
 });
 
-// SCN-04: place 30% in Whole → blocked → delete → recover → finish
-test('SCN-04 EX-01 wrong Whole placement blocked then delete recover finish', async ({ page }) => {
+// SCN-04: wrong option on the current step is blocked (stays put, shows error),
+// then the correct option advances — the core retry behavior this UI exists for.
+test('SCN-04 EX-01 wrong step answer blocked then retried correctly finishes', async ({ page }) => {
   await register(page, 'SCN Four');
   await startProblem(page);
 
-  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
+  // Step 1 ("40 students"): wrong option first — must stay on step 1 with an error.
+  await answerStep(page, 'PART_IN_PERCENTAGE');
+  await expect(page.getByTestId('message')).toBeVisible();
+  await expect(page.getByTestId('completed-step-1')).toHaveCount(0);
+  await expect(page.getByTestId('current-step')).toContainText('40 students');
+
+  // Retry with the correct option — advances.
+  await answerStep(page, 'WHOLE');
+  await expect(page.getByTestId('completed-step-1')).toBeVisible();
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
 
-  // Free WHOLE, then attempt the invalid 30% → WHOLE placement.
-  await page.getByTestId('delete-WHOLE').click();
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveCount(0);
-
-  await assignToken(page, 'ex01-c1-percent', 'WHOLE');
+  // Step 2 ("30%"): same wrong→retry→correct pattern.
+  await answerStep(page, 'WHOLE');
   await expect(page.getByTestId('message')).toBeVisible();
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveCount(0);
-  await expect(page.getByTestId('chunk-2')).toHaveCount(0);
+  await expect(page.getByTestId('completed-step-2')).toHaveCount(0);
 
-  // Recover: place Whole correctly, then finish the journey.
-  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
-  await assignToken(page, 'ex01-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-2')).toBeVisible();
 
-  await assignToken(page, 'ex01-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('12');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();
   await expect(page.getByTestId('status')).toHaveText('COMPLETED');
 });
 
+// Deleting a completed step returns it to "current" for re-answering (PB-007).
+test('SCN-04b deleting a completed step allows re-answering it', async ({ page }) => {
+  await register(page, 'SCN Four B');
+  await startProblem(page);
+
+  await answerStep(page, 'WHOLE');
+  await expect(page.getByTestId('completed-step-1')).toBeVisible();
+
+  await page.getByTestId('delete-WHOLE').click();
+  await expect(page.getByTestId('completed-step-1')).toHaveCount(0);
+  await expect(page.getByTestId('current-step')).toContainText('40 students');
+
+  await answerStep(page, 'WHOLE');
+  await expect(page.getByTestId('completed-step-1')).toBeVisible();
+});
+
 test('refresh during each EX-01 stage resumes authoritative state', async ({ page }) => {
   await register(page, 'SCN Resume');
   await startProblem(page);
 
-  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
   const versionAfterCommit = await page.getByTestId('state-version').innerText();
@@ -105,14 +124,14 @@ test('refresh during each EX-01 stage resumes authoritative state', async ({ pag
   await expect(page.getByTestId('state-version')).toHaveText(versionAfterCommit);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
   await expect(page.getByTestId('chunk-2')).toHaveCount(0);
-  await expect(page.getByTestId('slot-label-WHOLE')).toHaveText('40 students');
+  await expect(page.getByTestId('completed-step-1')).toContainText('40 students');
 
-  await assignToken(page, 'ex01-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-2')).toBeVisible();
 
   await page.reload();
   await page.getByTestId('resume-session').click();
   await expect(page.getByTestId('chunk-2')).toBeVisible();
-  await expect(page.getByTestId('slot-label-PART_IN_PERCENTAGE')).toHaveText('30%');
+  await expect(page.getByTestId('completed-step-2')).toContainText('30%');
 });

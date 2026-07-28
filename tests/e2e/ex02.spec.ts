@@ -22,9 +22,9 @@ async function startProblem(page: Page): Promise<void> {
   await expect(page.getByTestId('chunk-0')).toBeVisible();
 }
 
-async function assignToken(page: Page, tokenId: string, slot: string): Promise<void> {
-  await page.getByTestId(`token-${tokenId}`).click();
-  await page.getByTestId(`assign-${slot}`).click();
+/** Answer the current step by clicking one of its curated options (change-28-jul.txt). */
+async function answerStep(page: Page, slot: string): Promise<void> {
+  await page.getByTestId(`current-step-option-${slot}`).click();
 }
 
 async function continueWhenReady(page: Page): Promise<void> {
@@ -58,11 +58,11 @@ async function submitPrematureAnswer(page: Page, value: string): Promise<void> {
 
 async function completeEx01(page: Page): Promise<void> {
   await startProblem(page);
-  await assignToken(page, 'ex01-c0-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex01-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex01-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('12');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();
@@ -71,11 +71,11 @@ async function completeEx01(page: Page): Promise<void> {
 
 async function completeEx02(page: Page): Promise<void> {
   await startProblem(page);
-  await assignToken(page, 'ex02-c0-ratio', 'RATIO');
+  await answerStep(page, 'RATIO');
   await continueWhenReady(page);
-  await assignToken(page, 'ex02-c1-blue', 'PART_IN_NUMBER');
+  await answerStep(page, 'PART_IN_NUMBER');
   await continueWhenReady(page);
-  await assignToken(page, 'ex02-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('10');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();
@@ -84,11 +84,11 @@ async function completeEx02(page: Page): Promise<void> {
 
 async function completeEx04(page: Page): Promise<void> {
   await startProblem(page);
-  await assignToken(page, 'ex04-c0-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex04-c1-percent', 'PART_IN_PERCENTAGE');
+  await answerStep(page, 'PART_IN_PERCENTAGE');
   await continueWhenReady(page);
-  await assignToken(page, 'ex04-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('12');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();
@@ -109,13 +109,13 @@ test('SCN-05 EX-02 premature answer blocked then acknowledge finish 10', async (
   await page.getByTestId('acknowledge').click();
   await expect(page.getByTestId('acknowledge')).toHaveCount(0);
 
-  await assignToken(page, 'ex02-c0-ratio', 'RATIO');
+  await answerStep(page, 'RATIO');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
-  await assignToken(page, 'ex02-c1-blue', 'PART_IN_NUMBER');
+  await answerStep(page, 'PART_IN_NUMBER');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-2')).toBeVisible();
-  await assignToken(page, 'ex02-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('10');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();
@@ -135,21 +135,22 @@ test('SCN-06 EX-03 premature calc then complement reject finish 20', async ({ pa
   await expect(page.getByTestId('acknowledge')).toBeVisible();
   await page.getByTestId('acknowledge').click();
 
-  await assignToken(page, 'ex03-c0-fraction', 'FRACTION');
+  await answerStep(page, 'FRACTION');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-1')).toBeVisible();
-  await assignToken(page, 'ex03-c1-whole', 'WHOLE');
+  await answerStep(page, 'WHOLE');
   await continueWhenReady(page);
   await expect(page.getByTestId('chunk-2')).toBeVisible();
 
-  // Treat 3/5 as remaining: free the fraction token, then place it in UNKNOWN.
+  // Treat 3/5 as remaining: delete the completed fraction step, then re-answer
+  // it wrong (UNKNOWN) — classified as COMPLEMENT_CONFUSION, stays on step 1.
   await page.getByTestId('delete-FRACTION').click();
-  await assignToken(page, 'ex03-c0-fraction', 'UNKNOWN');
+  await answerStep(page, 'UNKNOWN');
   await expect(page.getByTestId('message')).toBeVisible();
-  await expect(page.getByTestId('slot-label-UNKNOWN')).toHaveCount(0);
+  await expect(page.getByTestId('completed-step-1')).toHaveCount(0);
 
-  await assignToken(page, 'ex03-c0-fraction', 'FRACTION');
-  await assignToken(page, 'ex03-c2-unknown', 'UNKNOWN');
+  await answerStep(page, 'FRACTION');
+  await answerStep(page, 'UNKNOWN');
   await page.getByTestId('final-answer-input').fill('20');
   await page.getByTestId('submit-answer').click();
   await expect(page.getByTestId('completed')).toBeVisible();

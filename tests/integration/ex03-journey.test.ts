@@ -129,7 +129,7 @@ describe('EX-03 fraction journey (real API + PostgreSQL)', () => {
 
     session = await startSession(user);
     expect(session.visible_chunks[0]?.content).toContain('three fifths');
-    expect(session.content_version).toBe(2);
+    expect(session.content_version).toBe(3);
 
     const [row] = await db
       .select({
@@ -138,13 +138,13 @@ describe('EX-03 fraction journey (real API + PostgreSQL)', () => {
       })
       .from(learningSessions)
       .where(eq(learningSessions.id, session.session_id));
-    expect(row!.contentVersion).toBe(2);
+    expect(row!.contentVersion).toBe(3);
     const [problem] = await db
       .select({ version: problems.version, problemKey: problems.problemKey })
       .from(problems)
       .where(eq(problems.id, row!.problemId));
     expect(problem!.problemKey).toBe('EX-03');
-    expect(problem!.version).toBe(2);
+    expect(problem!.version).toBe(3);
 
     ({ body: session } = await act(user, session, 'SUBMIT_FINAL_ANSWER', { value: '20' }));
     expect(session.visible_chunks).toHaveLength(1);
@@ -176,7 +176,7 @@ describe('EX-03 fraction journey (real API + PostgreSQL)', () => {
       slot: 'UNKNOWN',
       token_id: 'ex03-c0-fraction',
     });
-    expect(complement.body.workspace.slots.find((s) => s.slot === 'UNKNOWN')?.token_id).toBeNull();
+    expect(complement.body.completed_steps.some((s) => s.correct_slot === 'UNKNOWN')).toBe(false);
     session = complement.body;
 
     const complementAttempts = await db

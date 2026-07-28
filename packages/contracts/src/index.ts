@@ -73,14 +73,31 @@ export const visibleChunkSchema = z
   .strict();
 export type VisibleChunk = z.infer<typeof visibleChunkSchema>;
 
-export const workspaceSlotSchema = z
+// Ordered, already-answered steps (change-28-jul.txt goal #5: "show all prior
+// answered steps plus the current step"). Never reveals options or misconceptions.
+export const completedStepSchema = z
   .object({
-    slot: slotSchema,
-    token_id: z.string().nullable(),
-    label: z.string().nullable(),
+    step_pos: z.number().int().min(1),
+    token_id: z.string(),
+    label: z.string(),
+    correct_slot: slotSchema,
   })
   .strict();
-export type WorkspaceSlot = z.infer<typeof workspaceSlotSchema>;
+export type CompletedStep = z.infer<typeof completedStepSchema>;
+
+// The one active step's answer set. Never reveals which option is correct.
+export const stepOptionPublicSchema = z.object({ slot: slotSchema, label: z.string() }).strict();
+export type StepOptionPublic = z.infer<typeof stepOptionPublicSchema>;
+
+export const activeStepSchema = z
+  .object({
+    step_pos: z.number().int().min(1),
+    token_id: z.string(),
+    label: z.string(),
+    options: z.array(stepOptionPublicSchema),
+  })
+  .strict();
+export type ActiveStep = z.infer<typeof activeStepSchema>;
 
 export const publicSessionSchema = z
   .object({
@@ -88,7 +105,8 @@ export const publicSessionSchema = z
     state_version: z.number().int().min(0),
     status: sessionStatusSchema,
     visible_chunks: z.array(visibleChunkSchema),
-    workspace: z.object({ slots: z.array(workspaceSlotSchema) }),
+    completed_steps: z.array(completedStepSchema),
+    current_step: activeStepSchema.nullable(),
     accepted_commitments: z.array(z.string()),
     required_next_action: z.object({ action_type: actionTypeSchema.nullable() }),
     allowed_actions: z.array(actionTypeSchema),

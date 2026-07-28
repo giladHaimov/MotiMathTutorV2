@@ -53,7 +53,7 @@ describe('content import and disclosure (J-11)', () => {
     expect(started.content_version).toBe(problem!.version);
     expect(sessionRow!.contentVersion).toBe(problem!.version);
     expect(problem!.problemKey).toBe('EX-01');
-    expect(problem!.version).toBe(1);
+    expect(problem!.version).toBe(2);
   });
 
   it('never exposes raw full problem text through the public API (AC-012, PB-004)', async () => {

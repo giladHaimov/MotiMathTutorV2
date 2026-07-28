@@ -75,7 +75,6 @@ export async function startSession(
     engineVersion,
     contentVersion: problem.contentVersion,
     currentChunkIndex: 0,
-    workspaceSlots: problem.definition.workspace_slots,
     workspace,
     acceptedCommitments: [],
     chunks: chunkRows,
@@ -180,7 +179,6 @@ export async function getSession(
     engineVersion: s.engineVersion,
     contentVersion: s.contentVersion,
     currentChunkIndex: s.currentChunkIndex,
-    workspaceSlots: definition.workspace_slots,
     workspace,
     acceptedCommitments: s.acceptedCommitments as string[],
     chunks: chunkRows,
@@ -271,7 +269,6 @@ export async function submitAction(
       sessionId: s.id,
       engineVersion: s.engineVersion,
       contentVersion: s.contentVersion,
-      workspaceSlots: definition.workspace_slots,
       chunks: chunkRows,
       problemDefinition,
     };

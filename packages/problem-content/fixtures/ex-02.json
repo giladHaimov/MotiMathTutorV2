@@ -7,7 +7,7 @@
   },
   "problem": {
     "problem_key": "EX-02",
-    "version": 2,
+    "version": 3,
     "domain": "RATIO",
     "title": "Ratio: avoid premature quantification",
     "difficulty_level": 2,
@@ -15,27 +15,44 @@
     "status": "ACTIVE",
     "definition": {
       "workspace_slots": ["RATIO", "PART_IN_NUMBER", "UNKNOWN"],
-      "assignable": [
+      "steps": [
         {
+          "step_pos": 1,
           "token_id": "ex02-c0-ratio",
-          "slot": "RATIO",
+          "correct_slot": "RATIO",
           "requires_revealed_chunk_index": 0,
-          "label": "2:3"
+          "label": "2:3",
+          "options": [
+            { "slot": "RATIO", "label": "Ratio" },
+            { "slot": "PART_IN_NUMBER", "label": "Numeric part" },
+            { "slot": "UNKNOWN", "label": "Unknown" }
+          ]
         },
         {
+          "step_pos": 2,
           "token_id": "ex02-c1-blue",
-          "slot": "PART_IN_NUMBER",
+          "correct_slot": "PART_IN_NUMBER",
           "requires_revealed_chunk_index": 1,
-          "label": "15 blue marbles"
+          "label": "15 blue marbles",
+          "options": [
+            { "slot": "RATIO", "label": "Ratio" },
+            { "slot": "PART_IN_NUMBER", "label": "Numeric part" },
+            { "slot": "UNKNOWN", "label": "Unknown" }
+          ]
         },
         {
+          "step_pos": 3,
           "token_id": "ex02-c2-unknown",
-          "slot": "UNKNOWN",
+          "correct_slot": "UNKNOWN",
           "requires_revealed_chunk_index": 2,
-          "label": "red marbles"
+          "label": "red marbles",
+          "options": [
+            { "slot": "RATIO", "label": "Ratio" },
+            { "slot": "PART_IN_NUMBER", "label": "Numeric part" },
+            { "slot": "UNKNOWN", "label": "Unknown" }
+          ]
         }
       ],
-      "invalid_assignments": [],
       "fact_establishments": [
         { "fact": "RATIO", "revealed_at_chunk_index": 0 },
         { "fact": "SCALE", "revealed_at_chunk_index": 1 }

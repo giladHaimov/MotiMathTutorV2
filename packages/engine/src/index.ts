@@ -1,4 +1,4 @@
-import type { ActionType } from '@app/contracts';
+import type { ActionType, Slot } from '@app/contracts';
 import type {
   EngineAction,
   EngineGate,
@@ -7,6 +7,7 @@ import type {
   EngineRollbackRecord,
   EngineRollbackRule,
   EngineSessionState,
+  EngineStep,
   EngineSufficiencyDependency,
   PendingAcknowledgment,
   WorkspaceState,
@@ -105,7 +106,7 @@ export function computeAllowedActions(
   }
 
   const allowed: ActionType[] = [];
-  if (hasReachableEmptyAssignable(def, state)) {
+  if (currentStep(def, state)) {
     allowed.push('ASSIGN_SLOT');
   }
   if (state.workspace.slots.some((s) => s.token_id !== null)) {
@@ -118,6 +119,72 @@ export function computeAllowedActions(
     allowed.push('SUBMIT_FINAL_ANSWER');
   }
   return allowed;
+}
+
+/**
+ * The single active step (change-28-jul.txt goal #2): lowest `step_pos` among
+ * steps that are reachable (chunk already revealed) and not yet correctly
+ * answered. Returns undefined once every reachable step is answered (the
+ * client should then expect SUBMIT_COMMITMENT / SUBMIT_FINAL_ANSWER instead).
+ */
+function currentStep(
+  def: EngineProblemDefinition,
+  state: EngineSessionState,
+): EngineStep | undefined {
+  return [...def.steps]
+    .filter((s) => s.requires_revealed_chunk_index <= state.current_chunk_index)
+    .filter((s) => {
+      const filled = state.workspace.slots.find((w) => w.slot === s.correct_slot);
+      return !(filled && filled.token_id === s.token_id);
+    })
+    .sort((a, b) => a.step_pos - b.step_pos)[0];
+}
+
+/**
+ * Ordered, already-answered steps (goal #5: "show all prior answered steps").
+ * Never reveals options or misconception codes — only what was already
+ * correctly committed.
+ */
+export function computeCompletedSteps(
+  def: EngineProblemDefinition,
+  state: EngineSessionState,
+): Array<{ step_pos: number; token_id: string; label: string; correct_slot: Slot }> {
+  return [...def.steps]
+    .filter((s) => {
+      const filled = state.workspace.slots.find((w) => w.slot === s.correct_slot);
+      return filled && filled.token_id === s.token_id;
+    })
+    .sort((a, b) => a.step_pos - b.step_pos)
+    .map((s) => ({
+      step_pos: s.step_pos,
+      token_id: s.token_id,
+      label: s.label,
+      correct_slot: s.correct_slot,
+    }));
+}
+
+/**
+ * The single step currently shown to the student (goal #2/#7), with its full
+ * answer set. Never reveals which option is correct or any misconception code.
+ */
+export function computeActiveStep(
+  def: EngineProblemDefinition,
+  state: EngineSessionState,
+): {
+  step_pos: number;
+  token_id: string;
+  label: string;
+  options: Array<{ slot: Slot; label: string }>;
+} | null {
+  if (state.status !== 'ACTIVE') return null;
+  const step = currentStep(def, state);
+  if (!step) return null;
+  return {
+    step_pos: step.step_pos,
+    token_id: step.token_id,
+    label: step.label,
+    options: step.options.map((o) => ({ slot: o.slot, label: o.label })),
+  };
 }
 
 /**
@@ -134,7 +201,7 @@ export function computeRequiredNextAction(
   if (state.workspace.pending_acknowledgment) {
     return { action_type: 'ACKNOWLEDGE_INSUFFICIENT_INFORMATION' };
   }
-  if (hasReachableEmptyAssignable(def, state)) {
+  if (currentStep(def, state)) {
     return { action_type: 'ASSIGN_SLOT' };
   }
   if (commitmentReady(def, state)) {
@@ -168,27 +235,37 @@ function assignSlot(
     return rejectFrom(state, action, 'That slot does not exist for this problem.');
   }
 
-  const invalid = def.invalid_assignments.find((a) => a.token_id === token_id && a.slot === slot);
-  if (invalid) {
+  const step = def.steps.find((s) => s.token_id === token_id);
+  if (!step) {
+    return rejectFrom(state, action, 'That value cannot be placed in that slot.');
+  }
+  // Reachability gate: a step's own reveal requirement is what stops a
+  // student from jumping ahead to a future, not-yet-revealed step. Revisiting
+  // an already-completed step's slot (e.g. to trigger conflict-deletion) stays
+  // allowed — that's a distinct, pre-existing flow (PB-007/AC-026, EX-04),
+  // not step ordering. Which step is "current" for display/options is a
+  // separate, additive concern (see currentStep/computeActiveStep below).
+  if (step.requires_revealed_chunk_index > state.current_chunk_index) {
+    return rejectFrom(state, action, 'The required information has not been revealed yet.');
+  }
+
+  const chosenOption = step.options.find((o) => o.slot === slot);
+  if (!chosenOption) {
+    return rejectFrom(state, action, 'That is not a valid option for this step.');
+  }
+  if (slot !== step.correct_slot) {
     return rejectFrom(
       state,
       action,
-      'That assignment is structurally invalid.',
-      invalid.misconception_code,
+      'That assignment is incorrect.',
+      chosenOption.misconception_code ?? null,
     );
-  }
-
-  const permitted = def.assignable.find((a) => a.token_id === token_id && a.slot === slot);
-  if (!permitted) {
-    return rejectFrom(state, action, 'That value cannot be placed in that slot.');
-  }
-  if (permitted.requires_revealed_chunk_index > state.current_chunk_index) {
-    return rejectFrom(state, action, 'The required information has not been revealed yet.');
   }
 
   const target = state.workspace.slots.find((s) => s.slot === slot);
   if (target && target.token_id !== null) {
     // Occupied-slot conflict: explicit deletion required (PB-007 / AC-026).
+    // Defensive: the active step's slot is always empty by construction above.
     return rejectFrom(
       state,
       action,
@@ -201,9 +278,9 @@ function assignSlot(
   const dest = workspace.slots.find((s) => s.slot === slot);
   if (dest) {
     dest.token_id = token_id;
-    dest.label = permitted.label;
+    dest.label = step.label;
   } else {
-    workspace.slots.push({ slot, token_id, label: permitted.label });
+    workspace.slots.push({ slot, token_id, label: step.label });
   }
 
   const nextState: EngineSessionState = { ...state, workspace };
@@ -569,14 +646,10 @@ export function applyRollbackTransition(
   const workspace = cloneWorkspace(state.workspace);
   workspace.pending_acknowledgment = null;
   for (const slot of workspace.slots) {
-    const assignable = def.assignable.find(
-      (a) => a.slot === slot.slot && a.token_id === slot.token_id,
+    const step = def.steps.find(
+      (s) => s.correct_slot === slot.slot && s.token_id === slot.token_id,
     );
-    if (
-      slot.token_id !== null &&
-      assignable &&
-      assignable.requires_revealed_chunk_index > toChunkIndex
-    ) {
+    if (slot.token_id !== null && step && step.requires_revealed_chunk_index > toChunkIndex) {
       slot.token_id = null;
       slot.label = null;
     }
@@ -595,18 +668,18 @@ function nextGate(def: EngineProblemDefinition, state: EngineSessionState): Engi
 }
 
 /**
- * Position-derived gate check: every assignable whose reveal requirement is at
+ * Position-derived gate check: every step whose reveal requirement is at
  * or before the current chunk must already occupy its target slot with the
  * correct token. No extra fixture fields are required.
  */
 function gateRequirementMet(def: EngineProblemDefinition, state: EngineSessionState): boolean {
-  const required = def.assignable.filter(
-    (a) => a.requires_revealed_chunk_index <= state.current_chunk_index,
+  const required = def.steps.filter(
+    (s) => s.requires_revealed_chunk_index <= state.current_chunk_index,
   );
   if (required.length === 0) return false;
-  return required.every((a) => {
-    const filled = state.workspace.slots.find((s) => s.slot === a.slot);
-    return filled?.token_id === a.token_id;
+  return required.every((s) => {
+    const filled = state.workspace.slots.find((w) => w.slot === s.correct_slot);
+    return filled?.token_id === s.token_id;
   });
 }
 
@@ -624,17 +697,6 @@ function finalAnswerReady(def: EngineProblemDefinition, state: EngineSessionStat
   return def.completion_rule.requires_slots_filled.every((slot) => {
     const filled = state.workspace.slots.find((s) => s.slot === slot);
     return filled?.token_id !== null && filled?.token_id !== undefined;
-  });
-}
-
-function hasReachableEmptyAssignable(
-  def: EngineProblemDefinition,
-  state: EngineSessionState,
-): boolean {
-  return def.assignable.some((a) => {
-    if (a.requires_revealed_chunk_index > state.current_chunk_index) return false;
-    const filled = state.workspace.slots.find((s) => s.slot === a.slot);
-    return !filled || filled.token_id === null;
   });
 }
 
